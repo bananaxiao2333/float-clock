@@ -2,9 +2,9 @@
 
 **A borderless, transparent, always-on-top countdown overlay.** The window contains nothing but bold green monospace text: it drags, it locks, and both of its moments fire a system notification as they approach.
 
-[![CI](https://github.com/bananaxiao2333/float-clock/actions/workflows/ci.yml/badge.svg)](https://github.com/bananaxiao2333/float-clock/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/bananaxiao2333/float-clock/ci.yml?label=CI)](https://github.com/bananaxiao2333/float-clock/actions/workflows/ci.yml)
 [![Release](https://github.com/bananaxiao2333/float-clock/actions/workflows/release.yml/badge.svg)](https://github.com/bananaxiao2333/float-clock/actions/workflows/release.yml)
-[![Release](https://img.shields.io/github/v/release/bananaxiao2333/float-clock?label=download&sort=semver)](https://github.com/bananaxiao2333/float-clock/releases/latest)
+[![Download](https://img.shields.io/github/v/release/bananaxiao2333/float-clock?label=download&sort=semver)](https://github.com/bananaxiao2333/float-clock/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/bananaxiao2333/float-clock/total)](https://github.com/bananaxiao2333/float-clock/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CHANGELOG](https://img.shields.io/badge/changelog-CHANGELOG-informational)](CHANGELOG.md)
@@ -12,7 +12,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-000000?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-2ea44f)](#platform-differences)
 [![Single file](https://img.shields.io/badge/single%20file-no%20runtime-6f42c1)](#quick-start)
-[![CI](https://github.com/bananaxiao2333/float-clock/actions/workflows/ci.yml/badge.svg)](https://github.com/bananaxiao2333/float-clock/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/bananaxiao2333/float-clock/ci.yml?label=tests)](https://github.com/bananaxiao2333/float-clock/actions/workflows/ci.yml)
 [![Background](https://img.shields.io/badge/background-transparent-00FF66)](#platform-differences)
 [![Tray](https://img.shields.io/badge/tray-macOS%20%7C%20Windows-0078D4)](#the-tray-icon)
 
@@ -25,6 +25,72 @@ T-02:29:00            main title: time left until the offset moment
   T-00:29:00          subtitle: time elapsed since the target time
 20:29:00 | +02:00:00  third line: target time and offset
 ```
+
+---
+
+## Two situations this exists for
+
+It is a clock that will not let you look away, so it earns its keep where the
+number matters more than the app around it.
+
+### Your base has been found, and the strike lands in 30 minutes
+
+The detection is the thing that already happened; the impact is the thing you
+are racing. That is exactly the shape the two moments have: target the
+detection, offset the warning you got.
+
+```toml
+[time]
+target = "2026-09-20T21:15:00"   # the moment the strike was detected
+offset = "+30m"                   # 30 minutes to impact
+
+[notify]
+before = [600, 300, 180, 120, 60, 30, 10, 5, 3, 2, 1]
+after  = []
+at_moment = true
+```
+
+```text
+T-00:27:41            main title: time left until impact (21:45:00)
+  T+00:02:19          subtitle: time since detection, counting up
+21:15:00 | +00:30:00  third line: both moments at once
+```
+
+The main title is the only thing you need to read, and it never leaves the
+screen: it drops through `T-00:10:00`, `T-01:00`, `T-00:10` and each of those is
+a system notification too, so the last minute reaches you even if the overlay is
+behind something. Nothing has to be configured first either:
+
+```bash
+float-clock --target 2026-09-20T21:15:00 --offset +30m
+```
+
+Write the full date there. A bare `21:15` means *today*, and if that time has
+already passed it rolls over to tomorrow - which is what you want for the daily
+schedule below, and a 24-hour countdown when you are in the middle of an alert.
+
+### Ticket sales open at 20:00 and the queue is the whole game
+
+You do not want a countdown to 20:00; you want one to 19:55, when you should
+already be sitting on the page with your card details pasted. A negative offset
+buys you that lead time.
+
+```toml
+[time]
+target = "20:00"      # on sale now, and the same time every day after that
+offset = "-00:05:00"  # start refreshing five minutes early
+```
+
+```text
+T-00:05:00            main title: time left until you should be trying
+  T-00:10:00          subtitle: time left until the actual on-sale time
+20:00:00 | -00:05:00  third line: the on-sale time, and the lead you asked for
+```
+
+The big number is the actionable one: it hits `T-00:00:00` and flips to `T+…` at
+19:55, which is the signal to start clicking, while the subtitle keeps counting
+down to the sale itself. A bare `20:00` means today, and rolls over to tomorrow
+once it has passed, so the same config works the next day without being touched.
 
 ---
 
