@@ -12,7 +12,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-000000?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-2ea44f)](#platform-differences)
 [![Single file](https://img.shields.io/badge/single%20file-no%20runtime-6f42c1)](#quick-start)
-[![Tests](https://img.shields.io/badge/test-69%20passed-success)](#building-from-source)
+[![CI](https://github.com/bananaxiao2333/float-clock/actions/workflows/ci.yml/badge.svg)](https://github.com/bananaxiao2333/float-clock/actions/workflows/ci.yml)
 [![Background](https://img.shields.io/badge/background-transparent-00FF66)](#platform-differences)
 [![Tray](https://img.shields.io/badge/tray-macOS%20%7C%20Windows-0078D4)](#the-tray-icon)
 
