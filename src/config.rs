@@ -744,26 +744,4 @@ mod tests {
              regenerate it with `float-clock --init-config` and fill the placeholders in"
         );
     }
-
-    /// The same for the plain-text quickstart that goes into every archive: it
-    /// should not quote flag names that no longer exist.
-    #[test]
-    fn the_quickstart_only_mentions_real_flags() {
-        let quickstart = include_str!("../QUICKSTART.txt");
-        for flag in [
-            "--config",
-            "--config-path",
-            "--init-config",
-            "--print",
-            "--test-notify",
-            "--diagnose",
-            "--render-png",
-            "--help",
-        ] {
-            assert!(
-                quickstart.contains(flag),
-                "QUICKSTART.txt should mention {flag}"
-            );
-        }
-    }
 }

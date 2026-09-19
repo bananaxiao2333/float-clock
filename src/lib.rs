@@ -6,6 +6,7 @@
 
 pub mod app;
 pub mod config;
+pub mod crash;
 pub mod macos;
 pub mod notifier;
 pub mod notify;

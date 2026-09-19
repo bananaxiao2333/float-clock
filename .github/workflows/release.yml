@@ -55,6 +55,9 @@ jobs:
       # user with "the text encoding Unicode (UTF-8) is not applicable". The
       # .app inside a zip is what people should actually download: the zip
       # preserves the mode and the icon.
+      #
+      # The archive holds the app and nothing else - no read-me, no example
+      # config, no wrapper folder. Unpack it and what you downloaded is there.
       - name: Bundle into a .app and zip it
         run: |
           VERSION="$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -1)"
@@ -62,7 +65,6 @@ jobs:
           mv "out/$BIN" "stage/$BIN"
           tools/make_app.sh "stage/$BIN" "$VERSION" stage
           rm -f "stage/$BIN"
-          cp QUICKSTART.txt config.example.toml stage/
           (cd stage && zip -qry "../out/$BIN-macos-universal.zip" .)
           unzip -l "out/$BIN-macos-universal.zip"
 
@@ -123,7 +125,6 @@ jobs:
           mkdir -p stage
           install -m 0755 "target/x86_64-unknown-linux-gnu/release/$BIN" "stage/$BIN"
           file "stage/$BIN"
-          cp QUICKSTART.txt config.example.toml stage/
           mkdir -p out
           (cd stage && zip -qry "../out/$BIN-linux-x86_64.zip" .)
           unzip -l "out/$BIN-linux-x86_64.zip"
@@ -181,7 +182,6 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path stage, out | Out-Null
           Copy-Item "target/x86_64-pc-windows-msvc/release/$env:BIN.exe" "stage/$env:BIN.exe"
-          Copy-Item QUICKSTART.txt, config.example.toml stage/
           Compress-Archive -Path "stage/*" -DestinationPath "out/$env:BIN-windows-x86_64.zip" -Force
           Get-ChildItem out | Format-Table Name, Length
 

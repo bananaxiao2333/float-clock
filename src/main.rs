@@ -79,6 +79,10 @@ fn hide_console_for_double_click() {
 fn hide_console_for_double_click() {}
 
 fn main() -> ExitCode {
+    // First thing, so that nothing can panic before it is in place: a shipped
+    // build aborts on panic and a double-clicked launch throws stderr away.
+    float_clock::crash::install_hook();
+
     // This has to be the very first thing, before the box has time to appear.
     if std::env::args_os().len() <= 1 {
         hide_console_for_double_click();
@@ -261,30 +265,33 @@ fn parse_args() -> Result<Args, String> {
             "--offset" => args.offset = Some(take("--offset")?),
             "--print" => args.print = true,
             "--render-png" => args.render_png = Some(PathBuf::from(take("--render-png")?)),
-            "--scale" => {
-                args.scale = Some(
-                    take("--scale")?
-                        .parse()
-                        .map_err(|_| "--scale needs a number".to_string())?,
-                )
-            }
+            "--scale" => args.scale = Some(positive_number("--scale", &take("--scale")?)?),
             "--now" => args.now = Some(take("--now")?),
             "--diagnose" => args.diagnose = true,
             "--test-notify" => args.test_notify = true,
             "--settings" => args.settings = true,
             "--no-transparent" => args.no_transparent = true,
             "--probe-png" => args.probe_png = Some(PathBuf::from(take("--probe-png")?)),
-            "--probe" => {
-                args.probe = Some(
-                    take("--probe")?
-                        .parse()
-                        .map_err(|_| "--probe needs a number of seconds".to_string())?,
-                )
-            }
+            "--probe" => args.probe = Some(positive_number("--probe", &take("--probe")?)?),
             other => return Err(format!("unrecognised argument: {other} (try --help)")),
         }
     }
     Ok(args)
+}
+
+/// Parse a strictly positive, finite number.
+///
+/// `--probe -1` used to reach `Duration::from_secs_f32`, which panics - and in a
+/// release build a panic aborts, so a bad flag took the process down instead of
+/// printing a usage error.
+fn positive_number(flag: &str, text: &str) -> Result<f32, String> {
+    let value: f32 = text
+        .parse()
+        .map_err(|_| format!("{flag} needs a number, got {text:?}"))?;
+    if !value.is_finite() || value <= 0.0 {
+        return Err(format!("{flag} needs a positive number, got {text:?}"));
+    }
+    Ok(value)
 }
 
 fn offset_duration(offset_seconds: f64) -> Duration {

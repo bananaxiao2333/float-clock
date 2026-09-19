@@ -72,11 +72,12 @@ require_target() {
     fi
 }
 
-# Drop the shared reading material into a staging folder and zip it up.
+# Zip a staging folder. Each archive holds the program and nothing else: no
+# read-me, no example config, no wrapper folder. Unpack it and the thing you
+# downloaded is right there.
 # Usage: pack <zip-name> <staged-dir>
 pack() {
     local zip_name="$1" stage="$2"
-    cp QUICKSTART.txt config.example.toml "$stage/"
     (cd "$stage" && zip -qry "$ROOT/$DIST/$zip_name" .)
     echo "  -> $DIST/$zip_name"
 }

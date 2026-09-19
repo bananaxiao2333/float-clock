@@ -40,7 +40,7 @@ Every platform publishes one `.zip` and nothing else. Grab it from [**Releases**
 | **Linux** | `float-clock-linux-x86_64.zip` | unpack, then `chmod +x float-clock && ./float-clock` |
 | **Windows** | `float-clock-windows-x86_64.zip` | unpack, then double-click `float-clock.exe` |
 
-Each archive also contains `QUICKSTART.txt` (a plain-text getting-started guide) and `config.example.toml` (a fully commented example config).
+Each archive contains the program and nothing else - no wrapper folder, no read-me, no example config. Unpack it and what you downloaded is right there.
 
 Bare binaries are **not** published any more. A browser download strips the executable bit, and Finder then treats a bare Mach-O binary as a text file: it hands it to TextEdit, which reports *"the text encoding Unicode (UTF-8) is not applicable"*. A zip records the file mode, so unpacking restores it. Shipping one archive format for every platform also removes the "which file do I download?" question.
 
@@ -452,7 +452,6 @@ A few things in the tree are not compiled at all:
 | `tools/make_icons.py` | draws the icons |
 | `tools/make_app.sh` | wraps a macOS binary into a `.app` |
 | `build.sh` | one command for all three platforms, zipped |
-| `QUICKSTART.txt` | the plain-text guide shipped inside every archive |
 | `config.example.toml` | a fully commented example config |
 
 `app` only paints an image that has already been computed and collects mouse and keyboard input, so "what it looks like" is decided entirely by the layers below it - and those are compared pixel by pixel in `cargo test`.

@@ -754,8 +754,19 @@ impl eframe::App for OverlayApp {
         [0.0, 0.0, 0.0, 0.0]
     }
 
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let ctx = ui.ctx().clone();
+    /// Everything that has to keep running whether or not the overlay is on
+    /// screen.
+    ///
+    /// This split is not a style choice. When the overlay is hidden, eframe runs
+    /// no egui pass at all - it calls `logic` instead of `ui`, deliberately, so
+    /// that no UI state is disturbed. Anything left in `ui` therefore stops
+    /// dead the moment the overlay is hidden.
+    ///
+    /// Which is exactly how "hide the overlay" used to be a one-way door: the
+    /// tray menu is polled here, so with the polling in `ui` the menu item that
+    /// brings the overlay back was never seen. The same applied to notifications
+    /// and to config hot reload.
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let now = Local::now().naive_local();
 
         self.install_tray();
@@ -773,10 +784,28 @@ impl eframe::App for OverlayApp {
             self.reload(now);
         }
 
-        self.handle_tray(&ctx, now);
+        self.handle_tray(ctx, now);
+        self.notifier.tick(now);
+
+        // `ui` ends the drag, and it runs after this, so a `Some` here means a
+        // drag is genuinely in progress.
+        if self.drag.is_none() {
+            self.track_position(ctx);
+        }
+
+        // Having asked for this repaint matters more than it looks. The only
+        // reason `logic` gets called at all for a hidden window is that a repaint
+        // was scheduled, and eframe schedules new ones only when the app asks.
+        // Without this line the event loop would simply sleep and the tray icon
+        // would go dead.
+        ctx.request_repaint_after(Duration::from_millis(self.config.interval_ms()));
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        let now = Local::now().naive_local();
 
         self.refresh_image(&ctx, now);
-        self.notifier.tick(now);
 
         let rect = ui.max_rect();
         let response = ui.interact(rect, ui.id().with("overlay"), egui::Sense::click_and_drag());
@@ -790,13 +819,12 @@ impl eframe::App for OverlayApp {
             );
         }
 
-        // The window system may have put the window somewhere else entirely
-        // (Wayland likes to ignore the initial coordinates). While we are not
-        // dragging, the system's answer is the truth, so we never write back a
-        // made-up position.
+        // While we are not dragging, the window system's answer for where the
+        // window is beats our own (Wayland likes to ignore the initial
+        // coordinates), so we never write back a made-up position. The tracking
+        // itself happens in `logic`; all this has to do is end the drag.
         if !response.dragged() {
             self.drag = None;
-            self.track_position(&ctx);
         }
 
         // Dragging. The drag is handed to the window manager, which is the only
@@ -891,8 +919,6 @@ impl eframe::App for OverlayApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
         }
-
-        ctx.request_repaint_after(Duration::from_millis(self.config.interval_ms()));
     }
 }
 

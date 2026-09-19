@@ -5,6 +5,41 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-09-20
+
+Hiding the overlay used to be a one-way door. That, and a few smaller pieces of
+sharpness, are fixed here.
+
+### Fixed
+
+- **Hiding the overlay made it impossible to bring back.** `eframe` runs no egui
+  pass at all for an invisible window - it calls `App::logic` instead of
+  `App::ui`, on purpose, so that no UI state is disturbed. Everything
+  background-ish was in `ui`, including the tray menu polling, so the moment the
+  overlay was hidden the tray menu item that shows it again was never even read.
+  Anything that has to keep running now lives in `logic`, and `logic` also asks
+  for the next repaint - without that request the event loop simply sleeps once
+  the window is hidden, and the tray goes dead for the same reason.
+- **Notifications and config hot reload stopped while the overlay was hidden**,
+  for exactly the same reason. A hidden overlay used to mean a silent one.
+- **`--probe` and `--scale` accepted nonsense.** A non-positive value reached
+  `Duration::from_secs_f32`, which panics; with `panic = "abort"` in the release
+  profile that took the whole process down instead of printing a usage error.
+
+### Added
+
+- **Crash reports.** A shipped build aborts on panic and a double-clicked launch
+  throws stderr away, so a crash used to leave nothing behind - which is how
+  [0.3.0] produced an unexplained `SIGABRT` with no message. A panic hook now
+  writes the message, the source location, the arguments and the executable path
+  to `crash.log` next to the config file.
+
+### Changed
+
+- **Release archives contain the program and nothing else.** No read-me, no
+  example config, no wrapper folder: unpack the zip and the thing you downloaded
+  is right there.
+
 ## [0.3.0] - 2026-09-20
 
 A tray icon, a settings window you get shown on the first run, a drag that no longer shakes, and one archive format for every platform.
@@ -15,7 +50,6 @@ A tray icon, a settings window you get shown on the first run, a drag that no lo
 - **The first run writes a config file and opens the settings window**, so the config path is discoverable without reading any documentation.
 - **The settings window is a real editor now**, not just a viewer. It edits the target time, the offset, the colour, the title size, the subtitle size, the font family and the opacity, plus Locked / Always on top / notifications checkboxes, and it has buttons to open the config file, show it in the folder and reload it from disk. It also displays the exact config path. `--settings` opens it on startup.
 - **`float-clock --config-path`** prints the config file that would be used and exits.
-- Every release archive now contains `QUICKSTART.txt` (a plain-text getting-started guide) and `config.example.toml` (a fully commented example config) next to the program.
 
 ### Changed
 
@@ -57,6 +91,7 @@ The Rust rewrite: the first usable version.
 - Config hot reload with comment-preserving write-back
 - 59 unit tests
 
+[0.3.1]: https://github.com/bananaxiao2333/float-clock/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/bananaxiao2333/float-clock/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/bananaxiao2333/float-clock/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/bananaxiao2333/float-clock/releases/tag/v0.2.0
