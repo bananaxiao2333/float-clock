@@ -39,6 +39,21 @@ jobs:
       - name: Formatting
         run: cargo fmt --all -- --check
 
+      # A step name with an unquoted ": " in it is not valid YAML, and GitHub
+      # only reports that when the workflow is evaluated - which for release.yml
+      # means "when someone pushes a tag", i.e. too late to be useful. Catch it
+      # on every push instead. (This has bitten us once already.)
+      #
+      # Ruby ships on the runner image and brings a YAML parser with it, so this
+      # needs no network and no extra action.
+      - name: Workflow YAML
+        run: |
+          for file in .github/workflows/*.yml; do
+            ruby -ryaml -e \
+              'YAML.safe_load(File.read(ARGV[0]), aliases: true); puts "#{ARGV[0]} OK"' \
+              "$file"
+          done
+
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 

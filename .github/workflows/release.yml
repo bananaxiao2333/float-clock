@@ -263,7 +263,7 @@ jobs:
             dist/float-clock-windows-x86_64.zip
             dist/SHA256SUMS
 
-      - name: Build-only run: keep the artefacts in Actions
+      - name: "Build-only run: keep the artefacts in Actions"
         if: github.event_name == 'workflow_dispatch' && inputs.tag == ''
         uses: actions/upload-artifact@v4
         with:
