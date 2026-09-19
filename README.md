@@ -7,11 +7,12 @@
 [![Release 下载](https://img.shields.io/github/v/release/bananaxiao2333/float-clock?label=%E4%B8%8B%E8%BD%BD&sort=semver)](https://github.com/bananaxiao2333/float-clock/releases/latest)
 [![下载量](https://img.shields.io/github/downloads/bananaxiao2333/float-clock/total)](https://github.com/bananaxiao2333/float-clock/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![更新日志](https://img.shields.io/badge/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97-CHANGELOG-informational)](CHANGELOG.md)
 
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-000000?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%7C%20Linux%20%7C%20Windows-2ea44f)](#%E5%B9%B3%E5%8F%B0%E5%B7%AE%E5%BC%82)
 [![单文件](https://img.shields.io/badge/%E5%8D%95%E6%96%87%E4%BB%B6-%E6%97%A0%E8%BF%90%E8%A1%8C%E6%97%B6-6f42c1)](#%E5%BF%AB%E9%80%9F%E5%BC%80%E5%A7%8B)
-[![测试](https://img.shields.io/badge/test-59%20passed-success)](#%E4%BB%8E%E6%BA%90%E7%A0%81%E6%9E%84%E5%BB%BA)
+[![测试](https://img.shields.io/badge/test-61%20passed-success)](#%E4%BB%8E%E6%BA%90%E7%A0%81%E6%9E%84%E5%BB%BA)
 [![无背景](https://img.shields.io/badge/%E8%83%8C%E6%99%AF-%E7%9C%9F%E9%80%8F%E6%98%8E-00FF66)](#%E5%B9%B3%E5%8F%B0%E5%B7%AE%E5%BC%82)
 
 用 Rust 写的，同一个代码库交叉编译出 **macOS / Linux / Windows** 三个平台的**单文件**可执行程序，
@@ -29,16 +30,23 @@ T-02:29:00          ← 主标题：距离「偏移时刻」还有多久
 
 ## 快速开始
 
-### 1. 下一个单文件
+### 1. 下载
 
-到 [**Releases**](https://github.com/bananaxiao2333/float-clock/releases/latest) 下对应平台的那个文件，
-改成可执行、双击即可：
+到 [**Releases**](https://github.com/bananaxiao2333/float-clock/releases/latest) 下对应平台的那个文件。
 
-| 平台 | 文件 | 说明 |
+| 平台 | 下载这个 | 怎么跑 |
 | --- | --- | --- |
-| macOS | `float-clock-macos-universal` | 通用二进制，Intel / Apple Silicon 都能跑 |
-| Linux | `float-clock-linux-x86_64` | 需要 glibc ≥ 2.28（Ubuntu 20.04+ / Debian 10+）；真透明要开合成器 |
-| Windows | `float-clock-windows-x86_64.exe` | 双击直接跑，不会弹控制台 |
+| **macOS** | `float-clock-macos-universal.zip` | 解压 → 双击 `FloatClock.app`（Intel / Apple Silicon 通用） |
+| **Linux** | `float-clock-linux-x86_64.tar.gz` | `tar -xzf` → `./float-clock-linux-x86_64` |
+| **Windows** | `float-clock-windows-x86_64.exe` | 双击 |
+
+> **macOS 别下裸二进制。** Release 里那个不带 `.zip` 的 `float-clock-macos-universal`
+> 是给脚本/终端用的：浏览器下载会把可执行位抹掉，Finder 于是把它当文本文件丢给「文本编辑」，
+> 弹出一句 **「无法打开文件，文字编码 Unicode (UTF-8) 不适用」**。
+> 想手动用的话先 `chmod +x float-clock-macos-universal`。
+
+> **macOS 首次打开**如果提示「无法验证开发者」，右键 →「打开」放行一次即可（没做公证，不是毒）。
+> 也可以用终端绕过：`xattr -dr com.apple.quarantine FloatClock.app`。
 
 同一个 Release 里还有 `SHA256SUMS`，想核对的话：
 
@@ -46,10 +54,17 @@ T-02:29:00          ← 主标题：距离「偏移时刻」还有多久
 shasum -a 256 -c SHA256SUMS        # macOS / Linux
 ```
 
-> macOS 首次运行如果提示「无法打开，因为无法验证开发者」，右键 →「打开」放行一次即可
-> （没做代码签名，不是毒）。
+Linux 上还可以把图标装上（可选）：
+
+```bash
+mkdir -p ~/.local/share/icons/hicolor/512x512/apps
+curl -L -o ~/.local/share/icons/hicolor/512x512/apps/float-clock.png \
+  https://raw.githubusercontent.com/bananaxiao2333/float-clock/main/assets/icon-512.png
+```
 
 ### 2. 跑起来
+
+双击打开也行，命令行也行：
 
 ```bash
 # 1. 生成配置
@@ -64,6 +79,17 @@ float-clock
 ```bash
 float-clock --target 2026-09-19T20:29:00 --offset +120m
 ```
+
+**配置文件放哪**（都找不到时会自动生成一份）：
+
+1. `--config <路径>` 指定的
+2. 环境变量 `FLOAT_CLOCK_CONFIG`
+3. 当前目录下的 `config.toml`
+4. 用户配置目录 —— macOS `~/Library/Application Support/FloatClock/`，
+   Windows `%APPDATA%\FloatClock\`，Linux `~/.config/float-clock/`
+
+双击打开时工作目录是 `/`，走的是第 4 条。所以「下载 → 双击 → 关掉 → 再打开」
+位置和设置都会记得。
 
 ### 交互
 
@@ -269,6 +295,7 @@ float-clock --probe 2 --probe-png /tmp/window.png
 | 双击启动时的控制台 | 无 | 自动隐藏（进程仍是控制台子系统，`--print` 之类的输出照常） | 取决于桌面环境 |
 | 默认等宽字体 | Menlo | Consolas | DejaVu Sans Mono |
 | 默认中文兜底字体 | PingFang SC | Microsoft YaHei | Noto Sans CJK SC |
+| 图标 | `FloatClock.app` 里的 `.icns` | 写进 exe 的资源段（含版本信息） | `assets/icon-512.png` |
 
 不支持的机器上程序会退回 `background` 配置的实心底色——文字和倒计时照常工作，只是背后有个色块。
 
@@ -281,16 +308,37 @@ Windows 上发通知时会带 `CREATE_NO_WINDOW` 启动 PowerShell，否则每�
 
 说清楚比较要紧：
 
-| 平台 | 交叉编译出单文件 | 二进制格式 / 依赖检查 | 真机跑起来 |
-| --- | --- | --- | --- |
-| macOS arm64 | ✅ | ✅ | ✅ 全流程（窗口透明、GPU 像素回读、通知、设置窗口） |
-| macOS x86_64 | ✅ | ✅ | ⬜ 没有 Intel 机器 |
-| Linux x86_64 | ✅ | ✅ 最高只要求 glibc 2.28，动态依赖只有 libc/libm/libpthread/libdl | ⬜ 本机没有 Linux 运行时 |
-| Windows x86_64 | ✅ | ✅ 仅依赖系统 DLL（无 mingw 运行时依赖） | ⬜ 本机没有 Windows 运行时 |
+| 平台 | 交叉编译 | 二进制格式 / 依赖检查 | 无窗口的命令行路径 | 真机开窗口 |
+| --- | --- | --- | --- | --- |
+| macOS arm64 | ✅ | ✅ | ✅ | ✅ 全流程（窗口透明、GPU 像素回读、通知、设置窗口、.app 双击） |
+| macOS x86_64 | ✅ | ✅ | ✅ 同一个通用二进制 | ⬜ 没有 Intel 机器 |
+| Linux x86_64 | ✅ | ✅ 最高只要求 glibc 2.28，动态依赖只有 libc/libm/libpthread/libdl | ✅ CI 里真跑了 `--print` / `--render-png` | ⬜ 没有 Linux 桌面 |
+| Windows x86_64 | ✅ | ✅ 仅依赖系统 DLL（无 mingw 运行时依赖） | ✅ CI 里真跑了 `--print` / `--render-png` | ⬜ 没有 Windows 桌面 |
 
-「长什么样」这件事本身是平台无关的：整张浮窗图由 `render` 自己逐像素合成，
-`cargo test` 里已经逐像素对过，三个平台跑的是同一段代码，所以画面部分不需要真机也能确定。
-不确定的只有窗口系统那一层（透明、置顶、拖拽、字体名），这一层由 `eframe`/`winit` 负责。
+「命令行路径」那列是 GitHub Actions 在真机（真 Windows / 真 Linux 容器）上跑的：
+`--version` / `--init-config` / `--print` / `--render-png` 都验证过。
+**没验证的只有窗口系统那一层**——透明、置顶、拖拽、字体名，这部分交给 `eframe`/`winit`。
+
+「长什么样」这件事本身也是平台无关的：整张浮窗图由 `render` 自己逐像素合成，
+`cargo test` 里已经逐像素对过，三个平台跑的是同一段代码。
+
+---
+
+## 图标
+
+![icon](assets/icon-512.png)
+
+近黑圆角方块 + 亮绿倒计时表盘，缺口留在右上角，中间是等宽的 `T−`（主标题的前缀）。
+和浮窗本身同一套配色（`#00FF66` / `#101010`）。
+
+图标是脚本画出来的，改完重新生成：
+
+```bash
+python3 tools/make_icons.py     # 需要 Pillow；在 macOS 上还会顺手出 .icns
+```
+
+产物 `assets/icon.png` / `icon-512.png` / `icon.ico` / `icon.icns` 都直接进仓库，
+所以 `build.sh` 和 CI 不需要额外装东西。
 
 ---
 
@@ -308,7 +356,7 @@ cargo test                       # 单元测试
 `build.sh` 把三条链路都串好了：
 
 ```bash
-./build.sh            # 默认出 macOS(通用) + Linux x86_64 + Windows x86_64
+./build.sh            # 默认出 macOS(通用 + .app) + Linux x86_64 + Windows x86_64
 ./build.sh macos      # 只出某一个
 ./build.sh linux windows
 ```
@@ -318,8 +366,11 @@ cargo test                       # 单元测试
 | 文件 | 目标 | 说明 |
 | --- | --- | --- |
 | `float-clock-macos-universal` | `aarch64-apple-darwin` + `x86_64-apple-darwin` | `lipo` 合成的通用二进制 |
-| `float-clock-linux-x86_64` | `x86_64-unknown-linux-gnu` | 需要 `zig` + `cargo-zigbuild` |
-| `float-clock-windows-x86_64.exe` | `x86_64-pc-windows-gnu` | 需要 `mingw-w64` |
+| `float-clock-macos-universal.zip` | 同上 | 里面是 `FloatClock.app`，带图标、可执行位不丢 |
+| `float-clock-linux-x86_64[.tar.gz]` | `x86_64-unknown-linux-gnu` | 需要 `zig` + `cargo-zigbuild` |
+| `float-clock-windows-x86_64.exe` | `x86_64-pc-windows-gnu` | 需要 `mingw-w64`；图标由 `build.rs` 写进去 |
+| `SHA256SUMS` | | 上面所有文件的校验和 |
+
 
 准备工作：
 
@@ -354,12 +405,23 @@ Windows 也可以用 MSVC 工具链（`cargo install cargo-xwin` + `--target x86
 | `render` | 把三行合成一张 RGBA 图 | ✅ 逐像素 |
 | `app` | 窗口、输入、通知调度 | 需要真实窗口 |
 | `macos` | 窗口体检 / 阴影与 Dock 调整 | macOS 专用 |
+| `build.rs` | 给 Windows 的 exe 写图标和版本信息 | 构建期 |
+
+目录里还有几个不参与编译的东西：
+
+| 路径 | 作用 |
+| --- | --- |
+| `assets/` | 图标（`tools/make_icons.py` 生成，直接进仓库） |
+| `tools/make_icons.py` | 画图标 |
+| `tools/make_app.sh` | 把 macOS 二进制包成 `.app` |
+| `build.sh` | 一条命令出三平台产物 |
+| `config.example.toml` | 默认配置的样例 |
 
 `app` 只负责「把已经算好的那张图贴上去 + 收鼠标键盘」，
 所以「长什么样」这件事完全由前面几层决定，而它们都在 `cargo test` 里逐像素对过。
 
 ```bash
-cargo test        # 59 个测试
+cargo test        # 61 个测试
 
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings

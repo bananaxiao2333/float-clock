@@ -7,6 +7,60 @@ use serde::Deserialize;
 
 pub const DEFAULT_CONFIG_NAME: &str = "config.toml";
 
+/// 找不到配置文件时，按用户目录放一份的目录名。
+const APP_DIR_NAME: &str = "FloatClock";
+
+/// 每用户配置目录（不依赖任何 crate，三平台各按自己的惯例来）：
+///
+/// * macOS   `~/Library/Application Support/FloatClock`
+/// * Windows `%APPDATA%\FloatClock`
+/// * Linux   `$XDG_CONFIG_HOME/float-clock`（默认 `~/.config/float-clock`）
+///
+/// 有它才能让「下载下来双击打开」这件事成立：.app 双击时工作目录是 `/`，
+/// 相对路径的 `./config.toml` 既找不到也写不进去。
+pub fn user_config_dir() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+
+    if cfg!(target_os = "macos") {
+        return home.map(|home| home.join("Library/Application Support").join(APP_DIR_NAME));
+    }
+    if cfg!(target_os = "windows") {
+        let base = std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .or_else(|| home.clone())?;
+        return Some(base.join(APP_DIR_NAME));
+    }
+    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
+        if !xdg.is_empty() {
+            return Some(PathBuf::from(xdg).join("float-clock"));
+        }
+    }
+    home.map(|home| home.join(".config/float-clock"))
+}
+
+/// 没显式指定 `--config` 时，按这个顺序找配置文件：
+///
+/// 1. 环境变量 `FLOAT_CLOCK_CONFIG`
+/// 2. 当前目录下的 `config.toml`（在终端里跑的时候最顺手，也和旧版行为一致）
+/// 3. 每用户配置目录里的 `config.toml`（双击打开走的是这条，目录不存在就创建）
+pub fn resolve_config_path() -> PathBuf {
+    if let Some(explicit) = std::env::var_os("FLOAT_CLOCK_CONFIG") {
+        if !explicit.is_empty() {
+            return PathBuf::from(explicit);
+        }
+    }
+
+    let local = PathBuf::from(DEFAULT_CONFIG_NAME);
+    if local.exists() {
+        return local;
+    }
+
+    match user_config_dir() {
+        Some(dir) => dir.join(DEFAULT_CONFIG_NAME),
+        None => local,
+    }
+}
+
 fn default_x() -> i32 {
     80
 }
@@ -335,6 +389,12 @@ pub fn patch_toml(path: &Path, updates: &[(&str, Value)]) -> Result<(), String> 
 
     let body = out.join("\n");
     let body = body.trim_end_matches('\n').to_string();
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            // 用户配置目录可能刚被清理掉，写之前确保它在
+            std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败：{e}"))?;
+        }
+    }
     std::fs::write(path, format!("{body}\n")).map_err(|e| format!("写入配置失败：{e}"))
 }
 
@@ -494,6 +554,35 @@ mod tests {
         let mut path = std::env::temp_dir();
         path.push(format!("float-clock-test-{name}-{}", std::process::id()));
         path
+    }
+
+    #[test]
+    fn user_config_dir_follows_platform_convention() {
+        let dir = user_config_dir().expect("测试机上应该有 HOME");
+        let text = dir.to_string_lossy();
+        if cfg!(target_os = "macos") {
+            assert!(
+                text.ends_with("Library/Application Support/FloatClock"),
+                "{text}"
+            );
+        } else if cfg!(target_os = "windows") {
+            assert!(text.ends_with("FloatClock"), "{text}");
+        } else {
+            assert!(text.ends_with("float-clock"), "{text}");
+        }
+    }
+
+    #[test]
+    fn explicit_config_env_var_wins() {
+        let path = temp_path("env");
+        // 这个变量只在本进程里改，测试是串行跑同一进程，所以用完立刻还原
+        let before = std::env::var_os("FLOAT_CLOCK_CONFIG");
+        std::env::set_var("FLOAT_CLOCK_CONFIG", &path);
+        assert_eq!(resolve_config_path(), path);
+        match before {
+            Some(value) => std::env::set_var("FLOAT_CLOCK_CONFIG", value),
+            None => std::env::remove_var("FLOAT_CLOCK_CONFIG"),
+        }
     }
 
     #[test]

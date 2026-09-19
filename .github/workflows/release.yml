@@ -47,8 +47,19 @@ jobs:
             "target/aarch64-apple-darwin/release/$BIN" \
             "target/x86_64-apple-darwin/release/$BIN" \
             -output "out/$BIN-macos-universal"
+          chmod +x "out/$BIN-macos-universal"
           lipo -info "out/$BIN-macos-universal"
           file "out/$BIN-macos-universal"
+
+      # 裸二进制经浏览器下载会丢掉可执行位，Finder 于是把它当文本文件丢给
+      # 「文本编辑」，报一句「文字编码 Unicode (UTF-8) 不适用」。
+      # 所以要真正给人下的是这个 .app（zip 里带着可执行位和图标）。
+      - name: 打包成 .app
+        run: |
+          VERSION="$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -1)"
+          tools/make_app.sh "out/$BIN-macos-universal" "$VERSION" out
+          (cd out && zip -qry "$BIN-macos-universal.zip" FloatClock.app)
+          ls -lR out
 
       - name: 冒烟测试（不开窗口的那几条命令）
         run: |
@@ -62,11 +73,16 @@ jobs:
             --target "2026-09-19T20:29:00" --offset "+120m" \
             --now "2026-09-19T20:00:00" --render-png ./smoke.png --scale 2
           file ./smoke.png
+          # .app 里那个二进制也得能跑
+          "./out/FloatClock.app/Contents/MacOS/float-clock" --version
+          codesign -dv out/FloatClock.app 2>&1 | head -3 || true
 
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-universal
-          path: out/float-clock-macos-universal
+          name: macos
+          path: |
+            out/float-clock-macos-universal
+            out/float-clock-macos-universal.zip
           if-no-files-found: error
 
   # ── Linux：用 zig 当链接器，把 glibc 底线钉在 2.28 ─────────────────────────
@@ -98,8 +114,11 @@ jobs:
       - name: 打包
         run: |
           mkdir -p out
-          cp "target/x86_64-unknown-linux-gnu/release/$BIN" "out/$BIN-linux-x86_64"
+          install -m 0755 "target/x86_64-unknown-linux-gnu/release/$BIN" "out/$BIN-linux-x86_64"
           file "out/$BIN-linux-x86_64"
+          # tar.gz 能保住可执行位，浏览器下载解压后直接能跑
+          tar -czf "out/$BIN-linux-x86_64.tar.gz" -C out "$BIN-linux-x86_64"
+          ls -l out
 
       - name: 冒烟测试（不开窗口的那几条命令）
         run: |
@@ -116,8 +135,10 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-x86_64
-          path: out/float-clock-linux-x86_64
+          name: linux
+          path: |
+            out/float-clock-linux-x86_64
+            out/float-clock-linux-x86_64.tar.gz
           if-no-files-found: error
 
   # ── Windows ───────────────────────────────────────────────────────────────
@@ -140,11 +161,13 @@ jobs:
       - name: 构建
         run: cargo build --release --target x86_64-pc-windows-msvc
 
+      # 图标和版本信息是 build.rs 里用 winresource 写进 exe 的（msvc 用系统的 rc.exe）
       - name: 打包
         shell: bash
         run: |
           mkdir -p out
           cp "target/x86_64-pc-windows-msvc/release/$BIN.exe" "out/$BIN-windows-x86_64.exe"
+          ls -l out
 
       - name: 冒烟测试（不开窗口的那几条命令）
         shell: pwsh
@@ -163,9 +186,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "--render-png 失败" }
           Get-Item ./smoke.png | Format-List Name, Length
 
+          # 资源段在不在（图标 + 版本信息）
+          $bytes = (Get-Item $bin).VersionInfo
+          "ProductName   : $($bytes.ProductName)"
+          "FileDescription: $($bytes.FileDescription)"
+          "FileVersion   : $($bytes.FileVersion)"
+          if ($bytes.ProductName -ne "FloatClock") { throw "exe 里没写进版本信息" }
+
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-x86_64
+          name: windows
           path: out/float-clock-windows-x86_64.exe
           if-no-files-found: error
 
@@ -186,7 +216,9 @@ jobs:
         working-directory: dist
         run: |
           ls -lh
-          sha256sum * > SHA256SUMS
+          rm -f SHA256SUMS
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -exec sha256sum {} + \
+            | sed 's|\./||' | sort -k 2 > SHA256SUMS
           cat SHA256SUMS
 
       - name: 打标签（手动触发时）
@@ -205,7 +237,9 @@ jobs:
           draft: false
           files: |
             dist/float-clock-macos-universal
+            dist/float-clock-macos-universal.zip
             dist/float-clock-linux-x86_64
+            dist/float-clock-linux-x86_64.tar.gz
             dist/float-clock-windows-x86_64.exe
             dist/SHA256SUMS
 

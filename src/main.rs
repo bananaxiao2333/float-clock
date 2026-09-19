@@ -106,7 +106,7 @@ fn run() -> Result<(), String> {
     let config_path = args
         .config
         .clone()
-        .unwrap_or_else(|| PathBuf::from(config::DEFAULT_CONFIG_NAME));
+        .unwrap_or_else(config::resolve_config_path);
 
     if args.init_config {
         if config_path.exists() && !args.force {
@@ -118,6 +118,13 @@ fn run() -> Result<(), String> {
         config::write_default_config(&config_path, 80, 80, "", "-00:05:00")?;
         println!("已生成 {}", config_path.display());
         return Ok(());
+    }
+
+    // 第一次跑（尤其是双击打开）时配置文件还不存在：直接落一份默认的，
+    // 不然之后拖动窗口要写回坐标才发现没地方写。
+    if !config_path.exists() {
+        config::write_default_config(&config_path, 80, 80, "", "-00:05:00")?;
+        println!("已生成默认配置 {}", config_path.display());
     }
 
     let mut config = config::load_config(&config_path)?;
