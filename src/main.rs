@@ -356,7 +356,7 @@ fn print_status(config: &Config, now: NaiveDateTime) -> Result<(), String> {
     println!(
         "offset  M    : {}   (offset {})",
         timefmt::datetime_of(mark),
-        format_hms(offset.round() as i64, true)
+        timefmt::format_signed_hms(offset, true)
     );
     println!("main title   : {}", overlay.layout.lines[0].text);
     println!("subtitle     : {}", overlay.layout.lines[1].text);

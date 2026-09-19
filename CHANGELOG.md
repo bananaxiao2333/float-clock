@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-09-20
+
+`--print` reported a negative offset as zero.
+
+### Fixed
+
+- **`float-clock --print` printed `(offset 00:00:00)` for a negative offset.**
+  The line renders the offset with `format_hms`, which is a magnitude
+  formatter - it clamps negatives to zero on purpose, because every other
+  caller renders the sign itself. The diagnostic passed the signed value
+  straight in, so `-00:05:00` came out as `00:00:00` while the offset moment M
+  printed beside it was plainly five minutes earlier. Both callers now go
+  through one `format_signed_hms`, so the sign cannot be dropped again. The
+  third line was always correct; only the diagnostic lied.
+
+  This went unnoticed because CI only checked that `--print` exits `0`, and the
+  offset it passes there (`+120m`) is positive.
+
+### Changed
+
+- Unit tests: 73 → **74 passed**.
+
 ## [0.4.0] - 2026-09-20
 
 Windows can now put the overlay above Task Manager, the on-screen keyboard and
@@ -122,6 +144,7 @@ The Rust rewrite: the first usable version.
 - Config hot reload with comment-preserving write-back
 - 59 unit tests
 
+[0.4.1]: https://github.com/bananaxiao2333/float-clock/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/bananaxiao2333/float-clock/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/bananaxiao2333/float-clock/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/bananaxiao2333/float-clock/compare/v0.2.1...v0.3.0

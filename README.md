@@ -479,7 +479,7 @@ A few things in the tree are not compiled at all:
 `app` only paints an image that has already been computed and collects mouse and keyboard input, so "what it looks like" is decided entirely by the layers below it - and those are compared pixel by pixel in `cargo test`.
 
 ```bash
-cargo test        # 69 tests
+cargo test        # unit tests, including pixel-for-pixel render comparisons
 
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings

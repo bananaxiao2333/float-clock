@@ -258,6 +258,17 @@ pub fn format_hms(total_seconds: i64, show_days: bool) -> String {
     }
 }
 
+/// A signed duration as `+HH:MM:SS` / `-HH:MM:SS`, the way the `{delta}` token
+/// and the `--print` report show an offset.
+///
+/// `format_hms` renders a magnitude only, so every caller that has a signed
+/// value has to render the sign itself; `0` counts as `+`.
+pub fn format_signed_hms(total_seconds: f64, show_days: bool) -> String {
+    let sign = if total_seconds < 0.0 { '-' } else { '+' };
+    let magnitude = total_seconds.abs().round() as i64;
+    format!("{sign}{}", format_hms(magnitude, show_days))
+}
+
 /// Compact human-readable duration for notification bodies: `1h 30m`.
 ///
 /// Zero-valued components are omitted and components are joined by one space.
@@ -317,7 +328,6 @@ pub fn render_info(
         return String::new();
     }
     let sign = if offset_seconds >= 0.0 { "+" } else { "-" };
-    let magnitude = offset_seconds.abs().round() as i64;
     let values = [
         ("datetime", target.format("%Y-%m-%d %H:%M:%S").to_string()),
         (
@@ -329,12 +339,9 @@ pub fn render_info(
         ("mark", mark.format("%H:%M:%S").to_string()),
         (
             "delta_human",
-            format!("{sign}{}", format_human(magnitude as f64)),
+            format!("{sign}{}", format_human(offset_seconds.abs())),
         ),
-        (
-            "delta",
-            format!("{sign}{}", format_hms(magnitude, show_days)),
-        ),
+        ("delta", format_signed_hms(offset_seconds, show_days)),
     ];
     let mut text = template.to_string();
     for key in INFO_TOKENS {
@@ -481,6 +488,16 @@ mod tests {
         assert_eq!(format_hms(90000, true), "01:01:00:00");
         assert_eq!(format_hms(90000, false), "25:00:00");
         assert_eq!(format_hms(-5, true), "00:00:00");
+    }
+
+    #[test]
+    fn signed_hms_keeps_the_sign() {
+        assert_eq!(format_signed_hms(-300.0, true), "-00:05:00");
+        assert_eq!(format_signed_hms(300.0, true), "+00:05:00");
+        assert_eq!(format_signed_hms(0.0, true), "+00:00:00");
+        // Without the sign rendered here a negative offset collapses to zero,
+        // which is what `--print` used to report.
+        assert_eq!(format_signed_hms(-90061.0, false), "-25:01:01");
     }
 
     #[test]
