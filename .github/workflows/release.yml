@@ -1,0 +1,217 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布/覆盖的标签，例如 v0.2.0（留空则只构建，不发 Release）"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  BIN: float-clock
+
+jobs:
+  # ── macOS：arm64 + x86_64 各编一遍，再用 lipo 合成通用二进制 ────────────────
+  macos:
+    name: macOS (universal)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: macos-universal
+
+      - name: 构建 arm64
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: 构建 x86_64
+        run: cargo build --release --target x86_64-apple-darwin
+
+      - name: 合成通用二进制
+        run: |
+          mkdir -p out
+          lipo -create \
+            "target/aarch64-apple-darwin/release/$BIN" \
+            "target/x86_64-apple-darwin/release/$BIN" \
+            -output "out/$BIN-macos-universal"
+          lipo -info "out/$BIN-macos-universal"
+          file "out/$BIN-macos-universal"
+
+      - name: 冒烟测试（不开窗口的那几条命令）
+        run: |
+          BIN_PATH="out/$BIN-macos-universal"
+          "$BIN_PATH" --version
+          "$BIN_PATH" --init-config --config ./smoke.toml
+          "$BIN_PATH" --config ./smoke.toml \
+            --target "2026-09-19T20:29:00" --offset "+120m" \
+            --now "2026-09-19T20:00:00" --print
+          "$BIN_PATH" --config ./smoke.toml \
+            --target "2026-09-19T20:29:00" --offset "+120m" \
+            --now "2026-09-19T20:00:00" --render-png ./smoke.png --scale 2
+          file ./smoke.png
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal
+          path: out/float-clock-macos-universal
+          if-no-files-found: error
+
+  # ── Linux：用 zig 当链接器，把 glibc 底线钉在 2.28 ─────────────────────────
+  # 这样 Ubuntu 20.04 / Debian 10 及以后都能直接跑，不用开容器。
+  linux:
+    name: Linux x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-zig
+
+      # 不钉版本：本地验证过的组合就是「最新 zig + 最新 cargo-zigbuild」
+      - uses: mlugg/setup-zig@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild
+
+      - name: 构建（glibc 2.28 底线）
+        run: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.28
+
+      - name: 打包
+        run: |
+          mkdir -p out
+          cp "target/x86_64-unknown-linux-gnu/release/$BIN" "out/$BIN-linux-x86_64"
+          file "out/$BIN-linux-x86_64"
+
+      - name: 冒烟测试（不开窗口的那几条命令）
+        run: |
+          BIN_PATH="out/$BIN-linux-x86_64"
+          "$BIN_PATH" --version
+          "$BIN_PATH" --init-config --config ./smoke.toml
+          "$BIN_PATH" --config ./smoke.toml \
+            --target "2026-09-19T20:29:00" --offset "+120m" \
+            --now "2026-09-19T20:00:00" --print
+          "$BIN_PATH" --config ./smoke.toml \
+            --target "2026-09-19T20:29:00" --offset "+120m" \
+            --now "2026-09-19T20:00:00" --render-png ./smoke.png --scale 2
+          file ./smoke.png
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: out/float-clock-linux-x86_64
+          if-no-files-found: error
+
+  # ── Windows ───────────────────────────────────────────────────────────────
+  # 这里用 MSVC 工具链：windows runner 自带，零配置。
+  # （macOS / Linux 上本地交叉编译走的是 build.sh 里的 mingw-w64，产物等价。）
+  windows:
+    name: Windows x86_64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-msvc
+
+      - name: 构建
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: 打包
+        shell: bash
+        run: |
+          mkdir -p out
+          cp "target/x86_64-pc-windows-msvc/release/$BIN.exe" "out/$BIN-windows-x86_64.exe"
+
+      - name: 冒烟测试（不开窗口的那几条命令）
+        shell: pwsh
+        run: |
+          $bin = "out/$env:BIN-windows-x86_64.exe"
+          & $bin --version
+          if ($LASTEXITCODE -ne 0) { throw "--version 失败" }
+          & $bin --init-config --config ./smoke.toml
+          & $bin --config ./smoke.toml `
+              --target "2026-09-19T20:29:00" --offset "+120m" `
+              --now "2026-09-19T20:00:00" --print
+          if ($LASTEXITCODE -ne 0) { throw "--print 失败" }
+          & $bin --config ./smoke.toml `
+              --target "2026-09-19T20:29:00" --offset "+120m" `
+              --now "2026-09-19T20:00:00" --render-png ./smoke.png --scale 2
+          if ($LASTEXITCODE -ne 0) { throw "--render-png 失败" }
+          Get-Item ./smoke.png | Format-List Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: out/float-clock-windows-x86_64.exe
+          if-no-files-found: error
+
+  # ── 汇总成一个 Release ────────────────────────────────────────────────────
+  release:
+    name: 发布
+    needs: [macos, linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 生成校验和
+        working-directory: dist
+        run: |
+          ls -lh
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: 打标签（手动触发时）
+        if: github.event_name == 'workflow_dispatch' && inputs.tag != ''
+        run: |
+          git tag -f "${{ inputs.tag }}"
+          git push -f origin "${{ inputs.tag }}"
+
+      - name: 发布 Release
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: FloatClock ${{ inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          draft: false
+          files: |
+            dist/float-clock-macos-universal
+            dist/float-clock-linux-x86_64
+            dist/float-clock-windows-x86_64.exe
+            dist/SHA256SUMS
+
+      - name: 只构建不发版时，把产物留在 Actions 里
+        if: github.event_name == 'workflow_dispatch' && inputs.tag == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-platforms
+          path: dist/*

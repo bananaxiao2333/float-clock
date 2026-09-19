@@ -1,0 +1,13 @@
+# Rust
+/target
+/dist
+**/*.rs.bk
+
+# 各人自己的时间点不该进仓库（模板在 config.example.toml）
+/config.toml
+
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/
+*.swp

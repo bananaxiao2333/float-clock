@@ -1,0 +1,47 @@
+[package]
+name = "float-clock"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.80"
+description = "无背景悬浮 T± 倒计时 / borderless floating countdown overlay"
+license = "MIT"
+
+[dependencies]
+eframe = { version = "0.36", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "wayland",
+    "x11",
+] }
+ab_glyph = "0.2"
+fontdb = "0.24"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+png = "0.18"
+# 排障用：从 GPU 回读真实渲染结果（--probe）
+egui_glow = "0.36"
+glow = "0.17"
+
+# 只有 macOS 上用来给窗口做像素体检（--probe），其它平台完全不参与编译
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-app-kit = { version = "0.3", features = [
+    "NSApplication",
+    "NSBitmapImageRep",
+    "NSColor",
+    "NSImageRep",
+    "NSView",
+    "NSWindow",
+] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.dev]
+opt-level = 1
