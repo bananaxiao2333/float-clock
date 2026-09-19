@@ -1,7 +1,10 @@
-"""macOS 专用探针：直接读 NSWindow 的真实绘制像素，验证「背景是否真的透明」。
+"""A macOS-only probe: read the pixels an NSWindow really drew, to prove that the
+background truly is transparent.
 
-不依赖屏幕录制权限：用 `cacheDisplayInRect:toBitmapImageRep:` 把窗口 contentView
-渲染进位图，再读 RGBA。屏幕截图被 TCC 挡住时这是唯一能拿到地面真相的办法。
+It needs no Screen Recording permission: `cacheDisplayInRect:toBitmapImageRep:`
+renders the window contentView into a bitmap and the RGBA values are read from
+that. With screenshots blocked by TCC this is the only way to get at the ground
+truth.
 """
 
 from __future__ import annotations
@@ -86,11 +89,15 @@ if AVAILABLE:
 
         @property
         def background_alpha(self) -> int:
-            """整窗出现次数最多的 alpha —— 对于浮窗就该是 0（背景透明）。"""
+            """The alpha that occurs most often in the window - for the overlay that should
+            be 0 (transparent background).
+            """
             return self.dominant_alpha
 
     def window_pixels(title: str):
-        """返回 (取值函数, 宽, 高)，用于逐像素检查。坐标是设备像素。"""
+        """Return (pixel accessor, width, height) for per-pixel checks. The coordinates
+        are device pixels.
+        """
         window = _find_window(title)
         if not window:
             return None
@@ -129,7 +136,9 @@ if AVAILABLE:
         return pixel, width, height
 
     def sample_window(title: str, *, stride: int = 4) -> WindowPixels | None:
-        """把标题含 `title` 的窗口内容渲染成位图并统计透明度。"""
+        """Render the content of the window whose title contains `title` into a bitmap and
+        collect transparency statistics.
+        """
         window = _find_window(title)
         if not window:
             return None
@@ -187,7 +196,7 @@ if AVAILABLE:
             dominant_alpha=dominant,
         )
 
-else:  # pragma: no cover - 非 macOS
+else:  # pragma: no cover - not macOS
 
     @dataclass
     class WindowPixels:  # type: ignore[no-redef]
@@ -203,7 +212,9 @@ else:  # pragma: no cover - 非 macOS
             return self.dominant_alpha
 
     def window_pixels(title: str):
-        """返回 (取值函数, 宽, 高)，用于逐像素检查。坐标是设备像素。"""
+        """Return (pixel accessor, width, height) for per-pixel checks. The coordinates
+        are device pixels.
+        """
         window = _find_window(title)
         if not window:
             return None

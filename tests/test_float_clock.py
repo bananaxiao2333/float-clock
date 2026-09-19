@@ -1,4 +1,4 @@
-"""单元测试：`uv run python -m unittest discover -s tests -v`"""
+"""Unit tests: `uv run python -m unittest discover -s tests -v`"""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ class TestParseTarget(unittest.TestCase):
 
     def test_invalid(self):
         with self.assertRaises(ValueError):
-            parse_target("明天早上", NOW)
+            parse_target("tomorrow morning", NOW)
         with self.assertRaises(ValueError):
             parse_target("", NOW)
 
@@ -93,15 +93,16 @@ class TestFormatting(unittest.TestCase):
         self.assertEqual(format_hms(86400 + 3723, show_days=False), "25:02:03")
 
     def test_format_human(self):
-        self.assertEqual(format_human(0), "0 秒")
-        self.assertEqual(format_human(45), "45 秒")
-        self.assertEqual(format_human(60), "1 分")
-        self.assertEqual(format_human(3600), "1 小时")
-        self.assertEqual(format_human(3600 + 120), "1 小时 2 分")
-        self.assertEqual(format_human(86400 + 3600 + 60 + 5), "1 天 1 小时 1 分")
+        self.assertEqual(format_human(0), "0s")
+        self.assertEqual(format_human(45), "45s")
+        self.assertEqual(format_human(60), "1m")
+        self.assertEqual(format_human(3600), "1h")
+        self.assertEqual(format_human(3600 + 120), "1h 2m")
+        self.assertEqual(format_human(5400), "1h 30m")
+        self.assertEqual(format_human(86400 + 3600 + 60 + 5), "1d 1h 1m")
 
 
-# 通知文案里不允许出现的 emoji / 符号区段
+# emoji / symbol ranges that must not appear in notification copy
 _EMOJI_RANGES = (
     (0x1F000, 0x1FAFF),
     (0x2190, 0x23FF),
@@ -118,7 +119,7 @@ def _has_emoji(text: str) -> bool:
 
 
 class TestNotifyCopy(unittest.TestCase):
-    """通知文案：不要 emoji，改用 [] 这类括号装饰。"""
+    """Notification copy: no emoji, decorated with brackets such as []."""
 
     def _events(self, **kwargs):
         from float_clock.config import NotifyConfig
@@ -128,35 +129,35 @@ class TestNotifyCopy(unittest.TestCase):
             setattr(config, key, value)
         notifier = MomentNotifier(config)
         start = datetime(2026, 1, 1, 12, 0, 0)
-        notifier.arm([("偏移时刻", start + timedelta(seconds=7200))], start)
+        notifier.arm([("Offset moment", start + timedelta(seconds=7200))], start)
         return notifier._events
 
     def test_no_emoji_and_brackets_used(self):
         for _fire_at, _key, title, body in self._events():
-            self.assertFalse(_has_emoji(title), f"标题里还有 emoji：{title!r}")
-            self.assertFalse(_has_emoji(body), f"正文里还有 emoji：{body!r}")
+            self.assertFalse(_has_emoji(title), f"title still contains an emoji: {title!r}")
+            self.assertFalse(_has_emoji(body), f"body still contains an emoji: {body!r}")
             self.assertIn("[", title)
             self.assertIn("]", title)
 
     def test_copy_is_rendered(self):
         rendered = [(title, body) for _f, _k, title, body in self._events()]
-        self.assertIn(("[T-01:00:00] 偏移时刻", "距离偏移时刻还有 1 小时"), rendered)
-        self.assertIn(("[T-00:01:00] 偏移时刻", "距离偏移时刻还有 1 分"), rendered)
-        self.assertIn("[T+00:00:05] 偏移时刻", [t for t, _b in rendered])
-        self.assertTrue(any("已到" in body for _t, body in rendered))
+        self.assertIn(("[T-01:00:00] Offset moment", "1h until Offset moment"), rendered)
+        self.assertIn(("[T-00:01:00] Offset moment", "1m until Offset moment"), rendered)
+        self.assertIn("[T+00:00:05] Offset moment", [t for t, _b in rendered])
+        self.assertTrue(any("reached at" in body for _t, body in rendered))
 
     def test_copy_templates_are_configurable(self):
         events = self._events(
             title_template="{label} {sign}{clock}",
-            body_before="{human} 后到点",
-            body_at="到点了（{time}）",
-            body_after="已过 {human}",
+            body_before="{human} to go",
+            body_at="Moment reached ({time})",
+            body_after="Passed {human} ago",
         )
         joined = " ".join(t + b for _f, _k, t, b in events)
-        self.assertIn("偏移时刻 -01:00:00", joined)
-        self.assertIn("1 小时 后到点", joined)
-        self.assertIn("到点了（14:00:00）", joined)
-        self.assertIn("已过 5 秒", joined)
+        self.assertIn("Offset moment -01:00:00", joined)
+        self.assertIn("1h to go", joined)
+        self.assertIn("Moment reached (14:00:00)", joined)
+        self.assertIn("Passed 5s ago", joined)
 
 
 class TestConfig(unittest.TestCase):
@@ -177,7 +178,7 @@ class TestConfig(unittest.TestCase):
             write_default_config(path, x=10, y=20)
             patch_toml(path, {"window.x": 123, "window.locked": True, "window.y": 456})
             text = path.read_text(encoding="utf-8")
-            self.assertIn("FloatClock 悬浮倒计时配置", text)
+            self.assertIn("FloatClock floating countdown configuration", text)
             cfg = load_config(path)
             self.assertEqual((cfg.window.x, cfg.window.y), (123, 456))
             self.assertTrue(cfg.window.locked)
@@ -214,7 +215,7 @@ class TestNotifier(unittest.TestCase):
         start = datetime(2026, 1, 1, 12, 0, 0)
         moment = start + timedelta(seconds=120)
         notifier = self._notifier()
-        notifier.arm([("目标时间点", moment)], start)
+        notifier.arm([("Target time", moment)], start)
 
         notifier.tick(start)
         self.assertEqual(self.sent, [])
@@ -231,8 +232,8 @@ class TestNotifier(unittest.TestCase):
         notifier.tick(moment)
         self.assertEqual(len(self.sent), 3)
         title, body = self.sent[2]
-        self.assertEqual(title, "[T-00:00:00] 目标时间点")
-        self.assertIn("已到", body)
+        self.assertEqual(title, "[T-00:00:00] Target time")
+        self.assertIn("reached at", body)
 
         notifier.tick(moment + timedelta(seconds=5))
         self.assertEqual(len(self.sent), 4)
@@ -242,7 +243,7 @@ class TestNotifier(unittest.TestCase):
         start = datetime(2026, 1, 1, 12, 0, 0)
         moment = start - timedelta(seconds=600)
         notifier = self._notifier()
-        notifier.arm([("目标时间点", moment)], start)
+        notifier.arm([("Target time", moment)], start)
         notifier.tick(start)
         self.assertEqual(self.sent, [])
 
@@ -250,31 +251,32 @@ class TestNotifier(unittest.TestCase):
         start = datetime(2026, 1, 1, 12, 0, 0)
         moment = start + timedelta(seconds=120)
         notifier = self._notifier()
-        notifier.arm([("目标时间点", moment)], start)
+        notifier.arm([("Target time", moment)], start)
         notifier.tick(start + timedelta(seconds=61))
         self.assertEqual(len(self.sent), 1)
-        # 拖动窗口会写回 config.toml 触发重载 → 重新布防不应重复弹窗
-        notifier.arm([("目标时间点", moment)], start + timedelta(seconds=62))
+        # Dragging the window writes config.toml back, which triggers a reload,
+        # so re-arming must not pop up the same notification again
+        notifier.arm([("Target time", moment)], start + timedelta(seconds=62))
         notifier.tick(start + timedelta(seconds=63))
         self.assertEqual(len(self.sent), 1)
 
 
 class TestKnockout(unittest.TestCase):
-    """第三行「绿底 + 镂空字」的位图生成（不需要窗口系统）。"""
+    """Bitmap generation for the third line, green background with knocked-out text (no window system needed)."""
 
     @classmethod
     def setUpClass(cls):
         if not knockout.available():
-            raise unittest.SkipTest("没装 Pillow")
+            raise unittest.SkipTest("Pillow is not installed")
         cls.face = knockout.find_font_file("Menlo", bold=True)
         if cls.face is None:
-            raise unittest.SkipTest("没有可用的等宽字体文件")
+            raise unittest.SkipTest("no usable monospace font file")
 
     def test_hex_to_rgb(self):
         self.assertEqual(knockout.hex_to_rgb("#00FF66"), (0, 255, 102))
         self.assertEqual(knockout.hex_to_rgb("00ff66"), (0, 255, 102))
         self.assertEqual(knockout.hex_to_rgb("#0f6"), (0, 255, 102))
-        self.assertEqual(knockout.hex_to_rgb("乱写"), (0, 255, 102))
+        self.assertEqual(knockout.hex_to_rgb("nonsense"), (0, 255, 102))
 
     def test_calibrate_px_size_is_monotonic(self):
         small = knockout.calibrate_px_size(20, *self.face)
@@ -291,10 +293,10 @@ class TestKnockout(unittest.TestCase):
         alphas = [image.getpixel((x, y))[3] for y in range(40) for x in range(220)]
         holes = sum(1 for a in alphas if a == 0)
         solid = sum(1 for a in alphas if a == 255)
-        self.assertGreater(solid, len(alphas) * 0.5, "绿底没铺满")
-        self.assertGreater(holes, len(alphas) * 0.03, "字没挖出来")
-        self.assertLess(holes, len(alphas) * 0.6, "挖太多了，字不成形")
-        # 挖空的地方必须是「整块颜色保留、只有 alpha 归零」
+        self.assertGreater(solid, len(alphas) * 0.5, "the green background is not filled")
+        self.assertGreater(holes, len(alphas) * 0.03, "the text was not knocked out")
+        self.assertLess(holes, len(alphas) * 0.6, "too much was knocked out, the text does not take shape")
+        # knocked-out pixels must keep the flat colour and only drop the alpha to zero
         hole_pixel = next(
             (x, y) for y in range(40) for x in range(220) if image.getpixel((x, y))[3] == 0
         )

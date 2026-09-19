@@ -1,83 +1,99 @@
-# FloatClock（Python 版）
+# FloatClock (Python edition)
 
-> **这是 `python` 分支** —— 最早用 uv + Tk 写的实现，现在作为存档保留。
-> 主力版本是 [`main` 分支的 Rust 版](https://github.com/bananaxiao2333/float-clock)：
-> 一个代码库交叉编译出三平台单文件，不用装 Python 运行时，三平台观感完全一致。
+> **This is the `python` branch** — the earliest implementation, written with uv + Tk, kept here as an archive.
+> The current version is the [Rust rewrite on `main`](https://github.com/bananaxiao2333/float-clock):
+> one codebase cross-compiled into a single-file executable for macOS, Linux and Windows, with no Python
+> runtime to install and the same look and feel on all three platforms.
 
 [![Python CI](https://github.com/bananaxiao2333/float-clock/actions/workflows/python.yml/badge.svg?branch=python)](https://github.com/bananaxiao2333/float-clock/actions/workflows/python.yml)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
-[![Tk](https://img.shields.io/badge/Tk-8.6%20%E5%BF%85%E9%9C%80-orange)](#%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98tk-90-%E7%9A%84%E9%80%8F%E6%98%8E%E6%9C%89-bug)
+[![Tk](https://img.shields.io/badge/Tk-8.6%20required-orange)](#troubleshooting-black-background-and-text-smearing)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%7C%20Linux%20%7C%20Windows-2ea44f)](#%E8%B7%A8%E5%B9%B3%E5%8F%B0%E8%AF%B4%E6%98%8E)
-[![测试](https://img.shields.io/badge/test-47%20passed-success)](#%E6%B5%8B%E8%AF%95)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-2ea44f)](#cross-platform-notes)
+[![Tests](https://img.shields.io/badge/test-47%20passed-success)](#tests)
 
-一个**只有文字、没有背景**的悬浮 T± 倒计时浮窗：
+A floating T± countdown overlay with **text only and no background**:
 
-- 绿色粗体、等宽字体（Menlo / Consolas / DejaVu Sans Mono，自动挑选）
-- 所有数字**补零对齐**（`00:05:03`，超过一天为 `01:02:03:04`），秒数跳动时宽度不抖
-- 左键**拖动**，右键**锁定 / 解锁**
-- 主标题 = 距离「偏移时刻」还有多久，副标题 = 距离「目标时间点」过去了多久
-- 第三行 = 目标时间点 + 偏移，做成**实心绿底 + 字镂空**（笔画里透出桌面）
-- 临近各个时间点自动弹**系统通知**
-- 用 uv 管理；依赖只有 Pillow（只为第三行的镂空位图），其余全是标准库
+- Bold green monospace text (Menlo / Consolas / DejaVu Sans Mono, picked automatically)
+- Every number is **zero-padded and aligned** (`00:05:03`, `01:02:03:04` past a day), so the width does not
+  jitter as the seconds tick
+- **Drag** with the left mouse button, **right-click to lock / unlock**
+- Main title = how long until the `Offset moment`; subtitle = how long ago the `Target time` was
+- Third line = target time + offset, rendered as **solid green with the glyphs knocked out** (the desktop
+  shows through the strokes)
+- **System notifications** fire automatically around each moment
+- Managed with uv; the only dependency is Pillow (used solely for the knocked-out third line bitmap),
+  everything else is the standard library
 
 ```
-T-00:04:32      ← 主标题：距离 目标时间点+偏移 还有 4 分 32 秒
-T+00:00:28      ← 副标题：距离 目标时间点 已经过去 28 秒
-▛20:29:00 · +02:00:00▟  ← 第三行：绿底镂空（字里透出桌面）
+T-00:04:32              <- main title: 4 min 32 s until the Offset moment
+T+00:00:28              <- subtitle: 28 s since the Target time
+▛09:30:00 | -00:05:00▟  <- third line: green knockout (the desktop shows through the glyphs)
 ```
 
-## 测试
+## Tests
 
 ```bash
-uv run python -m unittest discover -s tests -v      # 47 个测试
+uv run python -m unittest discover -s tests -v      # 47 tests
 ```
 
-其中 `tests/test_overlay_smoke.py` 会真的开一个 Tk 窗口，**需要真实显示器**
-（CI 上只跑纯逻辑的 `test_float_clock.py`）。
+`tests/test_overlay_smoke.py` really opens a Tk window and **needs a real display**
+(on CI only the pure-logic `test_float_clock.py` runs).
 
 ---
 
-## 跨平台说明
+## Cross-platform notes
 
-核心功能（浮窗、拖动、锁定、T± 计时、系统通知）在三个平台上都是同一套代码，
-没有任何平台特有的依赖：
+The core features (floating window, dragging, locking, T± timing, system notifications) are one and the
+same code on all three platforms, with no platform-specific dependency:
 
-| 能力 | macOS | Windows | Linux |
+| Capability | macOS | Windows | Linux |
 | --- | --- | --- | --- |
-| 无边框置顶浮窗 | ✅ `overrideredirect` | ✅ | ✅ |
-| **无背景（只有文字）** | ✅ `-transparent` + `systemTransparent`，**需 Tk 8.6** | ✅ `-transparentcolor` 抠色 | ⚠️ X11 不支持真透明，退化为 `x11_background` 底色 |
-| 拖动 / 右键锁定 / 双击设置 | ✅ | ✅ | ✅ |
-| T± 计时、补零等宽、主副标题 | ✅ | ✅ | ✅ |
-| 系统通知 | ✅ `osascript`（装了 terminal-notifier 就用它） | ✅ PowerShell WinRT Toast | ✅ `notify-send` |
-| 第三行「绿底镂空」 | ✅ AppKit 叠层 | 自动退回普通绿字 | 自动退回普通绿字 |
+| Borderless always-on-top window | ✅ `overrideredirect` | ✅ | ✅ |
+| **No background (text only)** | ✅ `-transparent` + `systemTransparent`, **needs Tk 8.6** | ✅ `-transparentcolor` keying | ⚠️ X11 has no real transparency, falls back to the `x11_background` colour |
+| Drag / right-click lock / double-click settings | ✅ | ✅ | ✅ |
+| T± timing, zero-padded monospace, main title + subtitle | ✅ | ✅ | ✅ |
+| System notifications | ✅ `osascript` (uses terminal-notifier when installed) | ✅ PowerShell WinRT Toast | ✅ `notify-send` |
+| Third line "green knockout" | ✅ AppKit overlay | Falls back to plain green text | Falls back to plain green text |
 
-**只有两处是平台相关的**，而且都做了优雅降级、不会让程序跑不起来：
+**Only two things are platform-specific**, and both degrade gracefully instead of stopping the program:
 
-1. **透明背景的画法**（`overlay._configure_window`）——三个分支各写各的，Linux 用底色兜底。
-2. **第三行的镂空**（`knockout.py` + `macos_overlay.py`）——镂空位图需要往窗口上贴一张带
-   alpha 的图，而 Tk 在透明窗口上画不出图片（见下面「实现说明」）。macOS 上走 AppKit 子视图，
-   其它平台 `info_style` 自动按 `text` 处理，就是普通绿字。
-   不想要这块也可以直接把 `info_style = "text"` 写死。
+1. **How the transparent background is painted** (`overlay._configure_window`) — one branch per platform,
+   with Linux falling back to a solid colour.
+2. **Knocking out the third line** (`knockout.py` + `macos_overlay.py`) — the knockout needs an image with
+   alpha composited onto the window, and Tk cannot draw images on a transparent window (see
+   "Implementation notes" below). On macOS this goes through an AppKit subview; elsewhere `info_style` is
+   treated as `text` automatically, which is just plain green text.
+   If you do not want any of it, simply hard-code `info_style = "text"`.
 
-通知图标方面：**三个后端都不提供自定义图标的接口**，图标由系统按「发送通知的程序」决定
-（macOS 上就是脚本编辑器）。这是系统限制，不做平台特有的绕行。
+As for notification icons: **none of the three backends offers an API for a custom icon** — the icon is
+chosen by the system from the program that sends the notification (Script Editor on macOS). That is a
+system limitation, so there is no platform-specific workaround for it.
+
+**Honest verification status:** the Python/Tk path was verified on **macOS only**. The Windows and Linux
+columns above describe code paths that exist and are guarded by graceful fallbacks, but they have not been
+exercised on real Windows or Linux machines on this branch. The `python.yml` workflow runs on
+`ubuntu-latest`, but it only runs the headless unit tests — the Tk smoke tests need a real display, so
+they never run there.
 
 ---
 
-## 怎么设置
+## How to configure it
 
-三种方式，改完立刻生效，**不用重启**：
+Three ways, all effective immediately, **no restart needed**:
 
-1. **双击浮窗** → 弹出设置窗口，改目标时间点 / 偏移 / 颜色 / 字号，点「应用」
-2. **直接编辑 `config.toml`** → 保存即可，程序每秒检查一次文件改动，约 1 秒内生效（注释不会丢）
-3. **命令行临时覆盖** → `uv run float-clock --target "2026-01-01 09:30" --offset -00:05:00`
+1. **Double-click the overlay** → a settings window opens; change the target time / offset / colour / font
+   size and press "Apply"
+2. **Edit `config.toml` directly** → just save it; the program checks the file every second and picks the
+   change up within about a second (comments are preserved)
+3. **Temporary command-line override** → `uv run float-clock --target "2026-01-01 09:30" --offset -00:05:00`
 
-操作方式：**拖动 = 左键，锁定/解锁 = 右键，设置 = 双击，菜单 = 中键**。
-浮窗上只有三行字，不会显示任何操作提示；出错走系统通知 + 终端 stderr。
+Controls: **drag = left button, lock/unlock = right button, settings = double-click, menu = middle button**.
+The overlay shows three lines of text and no operating hints at all; errors go to system notifications and
+to stderr on the terminal.
 
-还可以随时不开窗口检查当前状态：
+You can also inspect the current state at any time without opening a window:
 
 ```bash
 uv run float-clock --print
@@ -85,102 +101,123 @@ uv run float-clock --print
 
 ---
 
-## 快速开始
+## Quick start
 
 ```bash
 cd float-clock
 
-uv run float-clock --init-config        # 生成默认 config.toml（目标时间点 = 下一个整点）
-uv run float-clock                      # 启动浮窗
+uv run float-clock --init-config        # write the default config.toml (Target time = the next whole hour)
+uv run float-clock                      # start the overlay
 ```
 
-不想先写配置也行，首次运行会自动生成 `config.toml`。
+You do not have to write a config first either: the first run generates `config.toml` on its own.
 
-临时指定时间点：
+To pin a time for one run:
 
 ```bash
 uv run float-clock --target "2026-01-01 09:30" --offset -00:05:00
 ```
 
-不开窗口，只检查当前状态和接下来的提醒计划：
+To check the current state and the upcoming reminder schedule without opening a window:
 
 ```bash
 uv run float-clock --print
 ```
 
-> **环境要求**：Python ≥ 3.11。
-> `.python-version` 钉在 **3.12.7** 是**为了 macOS**——那是 uv 最后一个自带 Tk 8.6 的构建，
-> 而 Tk 9.0 在 macOS 上会把透明背景画成黑底（原因见「常见问题：背景还是黑的」）。
-> Windows / Linux 不受这个限制，想用别的解释器直接 `uv run --python 3.13 float-clock` 即可，
-> 仓库里的这份钉版对它们只是保守默认值。
+> **Requirements**: Python ≥ 3.11.
+> `.python-version` is pinned to **3.12.7** **for macOS** — that is the last uv-managed build that bundles
+> Tk 8.6, and Tk 9.0 paints the transparent background black on macOS (the reason is in
+> "Troubleshooting: black background and text smearing"). Windows and Linux are not bound by that; to use
+> another interpreter just run `uv run --python 3.13 float-clock`, the pin in this repository is merely a
+> conservative default for them.
 
----
+Command-line options:
 
-## T± 语义（重点）
-
-全程序统一用火箭倒计时那套写法：
-
-| 显示 | 含义 |
+| Option | Meaning |
 | --- | --- |
-| `T-00:05:00` | 距离该时刻**还有** 5 分钟 |
-| `T-00:00:00` | 正点那一秒 |
-| `T+00:00:12` | 该时刻**已经过去** 12 秒 |
-
-程序里有两个时刻：
-
-```
-目标时间点  T  = config.toml 里的 [time] target
-偏移时刻    M  = T + offset
-```
-
-- **主标题**：倒计时到 `M`（「距离偏移还有多久」）
-- **副标题**：以 `T` 为基准（「距离时间点过去了多久」）
-
-例：`target = "09:30:00"`、`offset = "-00:05:00"` → `M = 09:25:00`。
-09:20 时主标题是 `T-00:05:00`（距离 09:25 还有 5 分钟），副标题是 `T-00:10:00`（距离 09:30 还有 10 分钟）；
-09:26 时主标题变成 `T+00:01:00`（09:25 已过去 1 分钟），副标题是 `T-00:04:00`。
-
-`offset` 为 `0` 时主副标题都指向同一个时刻；`offset` 为正是 `T` 之后，为负是 `T` 之前。
+| `--config PATH` | path to the config file (default `./config.toml`) |
+| `--init-config` | write a default config file, then exit |
+| `--force` | with `--init-config`, overwrite an existing config |
+| `--target T` | target time T, e.g. `'2026-01-01T09:30:00'` / `'09:30'` / `'+1h'` |
+| `--offset D` | offset, e.g. `'-00:05:00'` / `'1h30m'` / `'-300'` |
+| `--print` | print the state only, without opening a window |
+| `--selftest SECONDS` | close the window automatically after N seconds (self-check) |
+| `--settings` | open the settings window on startup |
+| `--test-notify` | send one test notification, then exit |
+| `--diagnose` | print the window state one second after it opens (whether borderless / transparent really took effect), then exit |
+| `-h`, `--help` | show the help text |
+| `-V`, `--version` | show the version |
 
 ---
 
-## 实战示例：20:29 泄露，紧急处置窗口 120 分钟
+## T± semantics
 
-把「事件发生时刻」放进 `target`，把「窗口期」放进 `offset`，两个数就出来了：
+The whole program uses rocket-countdown notation:
+
+| Display | Meaning |
+| --- | --- |
+| `T-00:05:00` | that moment is **5 minutes away** |
+| `T-00:00:00` | the moment itself |
+| `T+00:00:12` | the moment **passed 12 seconds ago** |
+
+There are two moments in the program:
+
+```
+Target time    T  = [time] target in config.toml
+Offset moment  M  = T + offset
+```
+
+- **Main title**: counts down to `M` ("how long until the offset moment")
+- **Subtitle**: referenced to `T` ("how long ago the target time was")
+
+Example: `target = "09:30:00"` and `offset = "-00:05:00"` give `M = 09:25:00`.
+At 09:20 the main title is `T-00:05:00` (5 minutes until 09:25) and the subtitle is `T-00:10:00`
+(10 minutes until 09:30); at 09:26 the main title becomes `T+00:01:00` (09:25 passed a minute ago) and the
+subtitle is `T-00:04:00`.
+
+With `offset = 0` both titles point at the same moment; a positive offset is after `T`, a negative one
+before it.
+
+---
+
+## Worked example: a 20:29 leak with a 120-minute response window
+
+Put the "moment the incident happened" in `target` and the "window" in `offset`, and both numbers fall
+out of it:
 
 ```toml
 [time]
-# 泄露发生时刻（当天 20:29）
+# The moment the leak happened (20:29 that day)
 target = "2026-09-19T20:29:00"
-# 紧急处置窗口 120 分钟 → 截止时刻 = 20:29 + 120min = 22:29
+# 120-minute emergency response window -> deadline = 20:29 + 120min = 22:29
 offset = "+120m"
 ```
 
-于是：
+So:
 
-- **主标题** `= 距离截止 22:29 还有多久` ← 盯这个决定还有多少时间
-- **副标题** `= 泄露已经过去多久` ← 汇报口径
+- **Main title** `= how long until the 22:29 deadline` <- watch this to know how much time is left
+- **Subtitle** `= how long ago the leak happened` <- the wording you report with
 
-21:45:38 时它长这样：
+At 21:45:38 it looks like this:
 
 ```
-T-00:43:22            ← 距离 22:29 处置截止还有 43 分 22 秒
-T+01:16:38            ← 泄露已过去 1 小时 16 分 38 秒
-20:29:00 · +02:00:00  ← 泄露时刻 · 处置窗口 120 分钟
+T-00:43:22            <- 43 min 22 s until the 22:29 response deadline
+T+01:16:38            <- the leak happened 1 h 16 min 38 s ago
+20:29:00 | +02:00:00  <- the leak moment | the 120-minute response window
 ```
 
-整条时间线上主/副标题的变化：
+How the main title and subtitle move along the timeline:
 
-| 时刻 | 主标题 | 副标题 | 含义 |
+| Time | Main title | Subtitle | Meaning |
 | --- | --- | --- | --- |
-| 19:29 | `T-03:00:00` | `T-01:00:00` | 距离截止 3 小时，距离泄露还有 1 小时 |
-| 20:29 | `T-02:00:00` | `T-00:00:00` | **泄露发生** |
-| 21:29 | `T-01:00:00` | `T+01:00:00` | 窗口过半 |
-| 22:24 | `T-00:05:00` | `T+01:55:00` | 距离截止 5 分钟 |
-| 22:29 | `T-00:00:00` | `T+02:00:00` | **处置窗口到期** |
-| 22:35 | `T+00:06:00` | `T+02:06:00` | 已超时 6 分钟 |
+| 19:29 | `T-03:00:00` | `T-01:00:00` | 3 hours to the deadline, 1 hour until the leak |
+| 20:29 | `T-02:00:00` | `T-00:00:00` | **the leak happens** |
+| 21:29 | `T-01:00:00` | `T+01:00:00` | the window is half over |
+| 22:24 | `T-00:05:00` | `T+01:55:00` | 5 minutes to the deadline |
+| 22:29 | `T-00:00:00` | `T+02:00:00` | **the response window expires** |
+| 22:35 | `T+00:06:00` | `T+02:06:00` | 6 minutes over |
 
-窗口内的提醒建议（120 分钟的窗口，`before` 里加上 `7200`/`3600` 两档）：
+Suggested reminders inside the window (for a 120-minute window, add `7200` and `3600` to `before`):
 
 ```toml
 [notify]
@@ -188,94 +225,98 @@ before = [7200, 3600, 1800, 900, 600, 300, 180, 120, 60, 30, 10, 5, 3, 2, 1]
 after  = [1, 5, 30, 60, 300, 1800]
 ```
 
-这样会在这几个点弹系统通知：**截止前 2 小时 / 1 小时 / 30 分 / 15 分 / 10 分 / 5 分 /
-3 分 / 2 分 / 1 分 / 30 秒 / 10 秒 / 5 秒 / 3 / 2 / 1 秒**，正点再弹一次，
-超时后 1 秒 / 5 秒 / 30 秒 / 1 分 / 5 分 / 30 分各补一次。
-（`7200` 那一档正好落在泄露发生那一刻。）
+That fires a system notification at these points: **2 h / 1 h / 30 min / 15 min / 10 min / 5 min / 3 min /
+2 min / 1 min / 30 s / 10 s / 5 s / 3 / 2 / 1 s before the deadline**, once more on the moment itself, and
+again 1 s / 5 s / 30 s / 1 min / 5 min / 30 min after it is over.
+(The `7200` entry lands exactly on the moment the leak happened.)
 
-一行命令先看效果，不用开窗口：
+One command to see the effect, without opening a window:
 
 ```bash
 uv run float-clock --print --target "2026-09-19T20:29:00" --offset +120m
 ```
 
-第三行也可以按需换写法：
+The third line can be reshaped as needed:
 
 ```toml
 [display]
-info_template = "{time} · {delta}"                  # 20:29:00 · +02:00:00（默认）
-# info_template = "{datetime} ({delta_human})"      # 2026-09-19 20:29:00 (+2 小时)
-# info_template = "{time} → {mark}"                 # 20:29:00 → 22:29:00
-# info_template = ""                                # 不要第三行
-# info_style = "text"                               # 第三行改成普通绿字（不镂空）
+info_template = "{time} | {delta}"                  # 20:29:00 | +02:00:00 (the default)
+# info_template = "{datetime} ({delta_human})"      # 2026-09-19 20:29:00 (+2h)
+# info_template = "{time} -> {mark}"                # 20:29:00 -> 22:29:00
+# info_template = ""                                # no third line at all
+# info_style = "text"                               # third line as plain green text (no knockout)
 ```
 
-> 只想每天同一时间复用，`target` 可以直接写 `"20:29:00"`——当天已经过了就自动顺延到明天。
-> 真实事故请写完整的年月日，避免第二天变成「明天的 20:29」。
+> If you only want the same clock time every day, `target` can be written as `"20:29:00"` — once that time
+> has passed today it rolls over to tomorrow automatically.
+> For a real incident, write the full date, or tomorrow it turns into "20:29 tomorrow".
 
 ---
 
-## 操作方式
+## Controls
 
-| 操作 | 效果 |
+| Action | Effect |
 | --- | --- |
-| 左键拖动 | 移动浮窗（松手后坐标自动写回 `config.toml`，下次从这里开始） |
-| **双击** | 打开设置窗口 |
-| **右键单击** | **锁定 / 解锁**，看外框线就知道状态：**实线 = 锁定（拖不动）**，**虚线 = 可拖动** |
-| 中键 / Ctrl+右键 / ⌘+右键 | 弹出菜单（锁定、设置、重载配置、退出） |
-| Ctrl+L | 锁定 / 解锁 |
-| Ctrl+, | 打开设置窗口 |
-| Ctrl+R | 手动重载配置 |
-| Ctrl+Q | 退出 |
+| Left-button drag | Move the overlay (the position is written back to `config.toml` on release and restored there next time) |
+| **Double-click** | Open the settings window |
+| **Right-click** | **Lock / unlock**; the outline tells you which: **solid = locked (cannot be dragged)**, **dashed = draggable** |
+| Middle button / Ctrl+right-click / Cmd+right-click | Pop-up menu (lock, settings, reload config, quit) |
+| Ctrl+L | Lock / unlock |
+| Ctrl+, | Open the settings window |
+| Ctrl+R | Reload the config manually |
+| Ctrl+Q | Quit |
 
-锁定状态**不再用文字提示**，改成外框线：实线表示已固定，虚线表示可移动，一眼就能看出来。
-不想要外框就把 `[display] lock_indicator` 设成 `"none"`，或者改成锁定虚线、解锁实线
-（`solid_when_locked = false`）。
+The locked state is **no longer announced in words**; it uses the outline instead: solid means pinned,
+dashed means movable, visible at a glance.
+To drop the outline set `[display] lock_indicator` to `"none"`, or swap it round so that locked is dashed
+and unlocked is solid (`solid_when_locked = false`).
 
-窗口无边框、永久置顶，不占任务栏/程序坞。
+The window is borderless, always on top, and does not take a taskbar / Dock slot.
 
-> 快捷键需要窗口拿到键盘焦点；无边框窗口在 macOS 上有时拿不到焦点，
-> **右键 / 双击 / 中键始终可用**，所以这些操作都不依赖快捷键。
+> The keyboard shortcuts need the window to have keyboard focus, and a borderless window sometimes cannot
+> get focus on macOS. **Right-click / double-click / middle button always work**, so none of those actions
+> depend on a shortcut.
 
-### 设置窗口
+### Settings window
 
-右键菜单 →「设置…」可以直接改目标时间点、偏移、颜色、字号，点「应用」后
-写回 `config.toml`（**保留原有注释**）并立即生效。
+Menu (right-click) → "Settings…" edits the Target time, offset, colour and font sizes directly; pressing
+"Apply" writes them back to `config.toml` (**keeping the existing comments**) and takes effect at once.
 
-也可以直接编辑 `config.toml`：程序每秒检查一次文件修改时间，**保存即生效，不用重启**。
+You can equally well edit `config.toml` by hand: the program checks the file's modification time every
+second, so **saving is enough, no restart**.
 
 ---
 
-## 配置说明（config.toml）
+## Configuration reference (config.toml)
 
 ```toml
 [window]
-x = 80                 # 浮窗左上角坐标（拖动后自动更新）
+x = 80                 # overlay top-left corner (updated automatically after a drag)
 y = 80
-borderless = true      # 无边框，只留文字
-topmost = true         # 置顶
-locked = false         # 右键切换，会写回这里
-opacity = 1.0          # 整体不透明度
+borderless = true      # no title bar, text only
+topmost = true         # always on top
+locked = false         # toggled by right-click, written back here
+opacity = 1.0          # overall opacity
 
 [display]
-font_family = ""       # 留空 = 自动挑系统等宽字体；也可写 "Menlo"
-main_size = 46         # 主标题字号
-sub_size = 18          # 副标题字号
-color = "#00FF66"      # 绿色
-sub_color = ""         # 副标题颜色，留空跟主标题一致
-bold = true            # 粗体
-show_days = true       # 超过一天显示 DD:HH:MM:SS
+font_family = ""       # empty = pick a system monospace font automatically; "Menlo" also works
+main_size = 46         # main title font size
+sub_size = 18          # subtitle font size
+color = "#00FF66"      # green
+sub_color = ""         # subtitle colour, empty = same as the main title
+bold = true            # bold
+show_days = true       # show DD:HH:MM:SS past a day
 gap = 2
-x11_background = "#101010"   # Linux 等不支持透明背景时的底色
-interval_ms = 200      # 刷新间隔
-lock_indicator = "border"    # 外框线指示锁定状态；"none" 关闭
-border_color = ""            # 外框线颜色，留空 = 跟文字同色
-border_width = 2             # 外框线宽
-solid_when_locked = true     # true: 锁定=实线/解锁=虚线；false 反过来
-info_template = "{time} · {delta}"   # 第三行内容，设成 "" 则整行不显示
-info_size = 14               # 第三行字号
-info_color = ""              # 第三行颜色（镂空模式下是"底色"），留空 = 绿色
-info_style = "auto"          # auto = 能镂空就镂空；knockout / text 强制指定
+info_template = "{time} | {delta}"   # third line contents; "" hides the whole line
+info_size = 14         # third-line font size
+info_color = ""        # third-line colour (in knockout mode this is the "background"), empty = green
+info_style = "auto"    # auto = knock out when possible; knockout / text force one of the two
+x11_background = "#101010"   # background colour where transparency is unsupported, Linux for instance
+interval_ms = 200      # refresh interval
+lock_indicator = "border"    # outline showing the locked state; "none" turns it off
+border_color = ""            # outline colour, empty = same colour as the text
+border_width = 2             # outline width
+solid_when_locked = true     # true: locked = solid / unlocked = dashed; false the other way round
 main_template = "T{sign}{clock}"
 sub_template = "T{sign}{clock}"
 
@@ -290,144 +331,165 @@ after = [1, 5, 30, 60, 300]
 at_moment = true
 sound = true
 sound_name = "Glass"
+title_template = "[T{sign}{clock}] {label}"
+body_before = "{human} until {label}"
+body_at = "{label} reached at {time}"
+body_after = "{label} passed {human} ago"
 ```
 
-### 时间点写法
+### Target time formats
 
-`target` 支持：
+`target` accepts:
 
-- `2026-01-01T09:30:00`、`2026-01-01 09:30`、`2026-01-01`（ISO / 常见格式）
-- `2026/02/03 08:05`、`02-03 08:05`
-- `09:30` / `09:30:00` —— 今天该时刻，**已经过了就顺延到明天**（适合每天固定的日程）
-- `+1h30m` —— 相对现在
+- `2026-01-01T09:30:00`, `2026-01-01 09:30`, `2026-01-01` (ISO / common formats)
+- `2026/02/03 08:05`, `02-03 08:05`
+- `09:30` / `09:30:00` — that clock time today, **rolled over to tomorrow once it has passed**
+  (handy for a fixed daily schedule)
+- `+1h30m` — relative to now
 
-`offset` 支持：
+`offset` accepts:
 
-- `-00:05:00`、`5:00`、`+00:00:30`、`01:02:03:04`（天:时:分:秒）
-- `1h30m`、`90m`、`2d`、`90s`
-- `-300` / `300` —— 纯数字按**秒**算
-
----
-
-## 系统通知
-
-对**两个时间点**（目标时间点 `T`、偏移时刻 `M`）分别排提醒：
-
-- `before` 里的每个秒数：提前提醒一次，标题形如 `⏳ 目标时间点 T-00:05:00`，正文写「距离目标时间点还有 5 分」
-- `at_moment = true`：正点提醒 `🔔 目标时间点 已到`
-- `after` 里的每个秒数：过后提醒一次，标题形如 `✅ 目标时间点 T+00:00:05`
-
-规则细节：
-
-- **不会重复弹**：同一条提醒只发一次（即使你拖动窗口导致配置重载）。
-- **启动时不补发历史**：程序启动时已经过去的提醒不会补弹，只安排往后的。
-- 修改 `before` / `after` 会重新排提醒队列。
-- 发送走系统命令，不阻塞界面（后台线程）：
-  - macOS：优先 `terminal-notifier`，否则 `osascript -e 'display notification …'`
-  - Windows：PowerShell 的 WinRT Toast
-  - Linux：`notify-send`
-
-**macOS 第一次不弹通知？** 去「系统设置 → 通知」把 **脚本编辑器 / Script Editor**
-（或终端、terminal-notifier）的通知权限打开，并关掉「专注模式」。用 osascript
-发通知时，系统把发送者认成 Script Editor。
+- `-00:05:00`, `5:00`, `+00:00:30`, `01:02:03:04` (days:hours:minutes:seconds)
+- `1h30m`, `90m`, `2d`, `90s`
+- `-300` / `300` — a bare number counts as **seconds**
 
 ---
 
-## 实现说明
+## System notifications
 
-- 透明背景：macOS 用 `wm attributes -transparent` + `systemTransparent` 颜色
-  （**必须 Tk 8.6**，Tk 9.0 有回归），Windows 用 `-transparentcolor` 抠色，
-  Linux 退化为深色底（可配 `x11_background`）。这三个分支互不影响，其它平台只是少个特效。
-- **窗口样式必须在映射前设置**：`withdraw()` → 样式 → 控件 → `geometry()` → `deiconify()`，
-  否则 macOS 会重新套上标题栏、透明失效。`--diagnose` 可验证。
-- 锁定指示用画布上的外框线（实线 / 虚线），不需要任何文字提示。
-- 第三行是内容而不是提示：用 `info_template` 组合，占位符有
-  `{date} {time} {datetime}`、`{mark} {mark_datetime}`、`{delta} {delta_human}`。
-- **第三行的「绿底镂空」为什么绕了一圈**：Tk 8.6 在 `-transparent` 窗口上**不绘制任何图片**
-  （`tk.Label(image=...)` 和 `canvas.create_image(...)` 实测都是整片透明，同一张带 alpha 的 PNG
-  在不透明窗口里完全正常），而且 `fg=systemTransparent` 也挖不出洞（实测像素数与 `fg=黑色`
-  逐点相同，等于空操作）。所以这一行的位图由 Pillow 生成（`knockout.py`），再通过一个
-  AppKit 子视图（`macos_overlay.py`，纯 ctypes 调 ObjC 运行时，不引入 PyObjC）盖在窗口上。
-  子视图重写了 `hitTest:` 返回 nil，鼠标事件照常穿透给 Tk，不影响拖动。
-- 补零等宽：`format_hms()` 只产出 `HH:MM:SS` / `DD:HH:MM:SS`，配合等宽字体保证逐秒跳动不位移。
-- 剩余时间向上取整、已过时间向下取整，所以正点那一秒恰好显示 `T-00:00:00`。
-- 配置回写用「按行定位 `节.键`」的方式，注释和顺序都不会丢。
+Reminders are scheduled separately **for both moments** (the `Target time` `T` and the `Offset moment`
+`M`):
 
-### 项目结构
+- every number of seconds in `before`: one reminder ahead of time, titled like
+  `[T-00:05:00] Offset moment`, with the body `5m until Offset moment`
+- `at_moment = true`: one reminder on the moment, titled `[T-00:00:00] Target time`, body
+  `Target time reached at 20:29:00`
+- every number of seconds in `after`: one reminder after the moment, titled like
+  `[T+00:00:05] Target time`, with the body `Target time passed 5s ago`
+
+The details of the rules:
+
+- **Nothing is sent twice**: each reminder fires once only (even if you drag the window and the config is
+  reloaded).
+- **No catching up at startup**: reminders that are already in the past when the program starts are not
+  sent; only the ones ahead are scheduled.
+- Editing `before` / `after` re-arms the reminder queue.
+- Sending goes through system commands and does not block the UI (background thread):
+  - macOS: `terminal-notifier` when available, otherwise `osascript -e 'display notification …'`
+  - Windows: the PowerShell WinRT Toast API
+  - Linux: `notify-send`
+
+**No notification on macOS the first time?** Go to System Settings → Notifications, allow notifications for
+**Script Editor** (or Terminal, or terminal-notifier) and turn off Focus. When a notification is sent with
+osascript, the system treats Script Editor as the sender.
+
+---
+
+## Implementation notes
+
+- Transparent background: macOS uses `wm attributes -transparent` plus the `systemTransparent` colour
+  (**Tk 8.6 required**, Tk 9.0 has a regression); Windows keys out a colour with `-transparentcolor`;
+  Linux degrades to a dark background (configurable through `x11_background`). The three branches do not
+  affect each other, other platforms merely lose one effect.
+- **Window style must be set before the window is mapped**: `withdraw()` → style → widgets →
+  `geometry()` → `deiconify()`, otherwise macOS puts the title bar back and transparency stops working.
+  `--diagnose` verifies this.
+- The lock indicator is an outline on the canvas (solid / dashed); no text hint is needed.
+- The third line is content rather than a hint: it is composed from `info_template`, whose placeholders are
+  `{date} {time} {datetime}`, `{mark} {mark_datetime}` and `{delta} {delta_human}`.
+- **Why the third line's "green knockout" takes such a detour**: Tk 8.6 **draws no image at all** on a
+  `-transparent` window (`tk.Label(image=...)` and `canvas.create_image(...)` both come out fully
+  transparent in practice, while the same alpha PNG is perfectly fine in an opaque window), and
+  `fg=systemTransparent` does not punch a hole either (measured pixel by pixel it is identical to
+  `fg=black`, i.e. a no-op). So the bitmap for that line is generated with Pillow (`knockout.py`) and then
+  composited onto the window through an AppKit subview (`macos_overlay.py`, which talks to the ObjC runtime
+  through plain ctypes, without pulling in PyObjC). The subview overrides `hitTest:` to return nil, so
+  mouse events keep falling through to Tk and dragging is unaffected.
+- Zero-padded and fixed width: `format_hms()` only ever produces `HH:MM:SS` / `DD:HH:MM:SS`, which together
+  with a monospace font keeps the text from shifting as the seconds tick.
+- Remaining time is rounded up and elapsed time rounded down, so the very second of the moment shows
+  exactly `T-00:00:00`.
+- Config write-back locates `section.key` line by line, so neither comments nor ordering are lost.
+
+### Project layout
 
 ```
 float-clock/
-├── pyproject.toml            # uv 项目定义 + 入口脚本 float-clock
-├── .python-version           # 3.12.7（uv 托管解释器：自带 Tk 8.6，透明才有效）
-├── config.toml               # 运行时生成/编辑
+├── pyproject.toml            # uv project definition + the float-clock entry script
+├── .python-version           # 3.12.7 (uv-managed interpreter: bundles Tk 8.6, which transparency needs)
+├── config.toml               # generated / edited at runtime
 ├── src/float_clock/
-│   ├── __main__.py           # 命令行入口
-│   ├── overlay.py            # 悬浮窗：透明背景、拖动、锁定、渲染
-│   ├── tclenv.py             # 修 venv 里 Tcl/Tk 数据目录的搜索路径
-│   ├── knockout.py           # 第三行镂空位图（Pillow，跨平台，缺了就退化成绿字）
-│   ├── macos_overlay.py      # macOS 专用：把镂空位图贴到窗口上（非 macOS 自动空转）
-│   ├── notifier.py           # 临近时间点通知调度（去重）
-│   ├── notify.py             # 跨平台系统通知
-│   ├── config.py             # TOML 读取 / 保留注释回写 / 默认配置
-│   └── timefmt.py            # T± 格式化与时间点解析
+│   ├── __main__.py           # command-line entry point
+│   ├── overlay.py            # the overlay: transparent background, drag, lock, rendering
+│   ├── tclenv.py             # fixes the Tcl/Tk data directory search path inside the venv
+│   ├── knockout.py           # third-line knockout bitmap (Pillow, cross-platform, degrades to green text)
+│   ├── macos_overlay.py      # macOS only: composites the knockout bitmap onto the window (a no-op elsewhere)
+│   ├── notifier.py           # reminder scheduling around the moments (de-duplicated)
+│   ├── notify.py             # cross-platform system notifications
+│   ├── config.py             # TOML loading / comment-preserving write-back / default config
+│   └── timefmt.py            # T± formatting and time parsing
 └── tests/
-    ├── test_float_clock.py       # 纯逻辑
-    ├── test_overlay_smoke.py     # 真窗口：无边框 / 透明像素 / 拖动 / 锁定 / 热重载
-    └── macos_probe.py            # 读 NSWindow 渲染位图（无需屏幕录制权限）
+    ├── test_float_clock.py       # pure logic
+    ├── test_overlay_smoke.py     # real window: borderless / transparent pixels / drag / lock / hot reload
+    └── macos_probe.py            # reads the NSWindow render bitmap (no Screen Recording permission needed)
 ```
 
-### 测试
+### Tests
 
 ```bash
 uv run python -m unittest discover -s tests -v
-uv run float-clock --print           # 不开窗口，打印 T± 与提醒计划
-uv run float-clock --diagnose        # 开窗 1 秒后报告「无边框 / 透明是否真的生效」
-uv run float-clock --selftest 5      # 开窗 5 秒自检
+uv run float-clock --print           # no window: print the T± state and the reminder schedule
+uv run float-clock --diagnose        # report one second after opening whether borderless / transparent really took effect
+uv run float-clock --selftest 5      # open the window and self-check for 5 seconds
 ```
 
-### 常见问题：窗口带了标题栏
+### Troubleshooting: the window has a title bar
 
-macOS 上 `overrideredirect`（去标题栏）和 `-transparent`（透明背景）**必须在窗口映射之前**
-设置好，最后再用 `deiconify()` 一次性显示；中途被系统重新映射的话，标题栏会回来、
-`geometry` 也会被忽略。
+On macOS `overrideredirect` (dropping the title bar) and `-transparent` (transparent background) **must be
+set before the window is mapped**, and only then shown in one go with `deiconify()`; if the system remaps
+the window in between, the title bar comes back and `geometry` is ignored too.
 
-本项目已经改成：`Tk()` → `withdraw()` → 配置样式 → 建控件 → `geometry()` → `deiconify()`
-→ 再确认一次样式，并用「内容原点 − 窗口框架原点 = 标题栏高度」做回归测试
-（`test_no_title_bar`）。
+This project already does it the right way: `Tk()` → `withdraw()` → configure the style → build the widgets
+→ `geometry()` → `deiconify()` → confirm the style once more, with "content origin − window frame origin =
+title bar height" as a regression test (`test_no_title_bar`).
 
-### 常见问题：背景还是黑的 + 文字拖影
+### Troubleshooting: black background and text smearing
 
-**这是 Tk 9.0 的 macOS 回归 bug，不是配置问题。**
+**This is a macOS regression in Tk 9.0, not a configuration problem.**
 
-Tk 9.0 的窗口后备缓冲是不透明的：它把 `systemTransparent` 当成「全透明色」往缓冲里填，
-等于什么都没擦，于是留下一整块不透明黑，旧字形也不被清除（这就是拖影）。实测同一段代码：
+The window backing store in Tk 9.0 is opaque: it treats `systemTransparent` as "the fully transparent
+colour" and fills the buffer with it, which clears nothing, so an opaque black rectangle is left behind and
+old glyphs are never erased (that is the smearing). Measured on the same piece of code:
 
-| Tk 版本 | 背景像素 | 透明像素占比 |
+| Tk version | Background pixels | Share of transparent pixels |
 | --- | --- | --- |
-| **Tk 9.0** | `RGBA(0,0,0,255)` 不透明黑 | 0% |
-| **Tk 8.6** | `RGBA(0,0,0,0)` 全透明 | 87%（只有绿色字形不透明） |
+| **Tk 9.0** | `RGBA(0,0,0,255)` opaque black | 0% |
+| **Tk 8.6** | `RGBA(0,0,0,0)` fully transparent | 87% (only the green glyphs are opaque) |
 
-所以项目把 `.python-version` 钉在 **3.12.7**（uv 的最后一个自带 Tk 8.6 的构建）。
-检查当前用的是哪一代 Tk：
+That is why the project pins `.python-version` to **3.12.7** (the last uv build bundling Tk 8.6).
+To check which generation of Tk is in use:
 
 ```bash
 uv run python -c "import tkinter; print('Tk', tkinter.TkVersion)"
-uv run float-clock --diagnose      # 顺便报告无边框/透明是否生效
+uv run float-clock --diagnose      # also reports whether borderless / transparent took effect
 ```
 
-如果显示 Tk 9，且你确实要留在 Tk 9 上，程序启动时会直接提示「⚠︎ Tk 9 的透明有 bug」。
-`tests/test_overlay_smoke.py::test_background_pixels_are_really_transparent`
-会用位图读像素的方式守住这个回归（在 Tk 9 上会失败）。
+If it prints Tk 9 and you really want to stay on Tk 9, the program warns you up front at startup that
+"Tk 9 transparency is buggy".
+`tests/test_overlay_smoke.py::test_background_pixels_are_really_transparent` guards the regression by
+reading the actual pixels (it fails on Tk 9).
 
-### 常见问题：第三行不是镂空的
+### Troubleshooting: the third line is not knocked out
 
-- 只有 macOS 能镂空。其它平台（或 Pillow / 字体文件缺失、ObjC 挂载失败时）会自动回退成
-  普通绿字，并把原因打到 stderr。**这是设计好的降级，不是故障。**
-- 想手动切回普通绿字：`[display] info_style = "text"`。
-- 自检：`uv run float-clock --diagnose` 的「第三行」会打印这一行实际内容。
+- Only macOS can knock it out. Other platforms (or a missing Pillow / font file, or a failed ObjC mount)
+  fall back to plain green text automatically and print the reason to stderr. **That is a designed
+  degradation, not a failure.**
+- To switch back to plain green text by hand: `[display] info_style = "text"`.
+- To check: `uv run float-clock --diagnose` prints the third line's actual contents.
 
-### 常见问题：`Can't find a usable init.tcl`
+### Troubleshooting: `Can't find a usable init.tcl`
 
-python-build-standalone 把 `tcl8.6` / `tk8.6` 数据目录放在解释器基础前缀的 `lib/` 下，
-从 venv 里启动时 Tcl 找不到。程序在导入时自动设置 `TCL_LIBRARY` / `TK_LIBRARY`
-（见 `src/float_clock/tclenv.py`），不用手动配环境变量。
+python-build-standalone places the `tcl8.6` / `tk8.6` data directories under `lib/` in the interpreter's
+base prefix, and Tcl cannot find them when started from inside a venv. The program sets `TCL_LIBRARY` /
+`TK_LIBRARY` automatically at import time (see `src/float_clock/tclenv.py`), so no environment variables
+need to be configured by hand.

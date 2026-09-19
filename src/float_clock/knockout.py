@@ -1,7 +1,8 @@
-"""「绿底 + 镂空字」位图生成（纯 PIL，不依赖窗口系统）。
+"""Build the "green block + knocked-out glyphs" bitmap (pure PIL, no window system).
 
-Tk 在透明窗口上画不出带 alpha 的图，也挖不出洞，所以这一行的形状得自己算出来，
-再交给 `macos_overlay.KnockoutView` 用 AppKit 画上去。
+Tk cannot draw an image with an alpha channel on a transparent window, and it
+cannot punch holes in one either, so the shape of this line is worked out here
+and handed to `macos_overlay.KnockoutView` to be drawn with AppKit.
 """
 
 from __future__ import annotations
@@ -10,7 +11,8 @@ from pathlib import Path
 
 __all__ = ["find_font_file", "calibrate_px_size", "render_knockout", "available"]
 
-# 等宽字体文件候选：(tk 字体族名小写, 常规文件, 粗体文件, ttc 里的 face 索引)
+# Monospace font file candidates: (lowercase Tk family name, regular file, bold file,
+# face index inside the .ttc)
 _FONT_TABLE: dict[str, tuple[tuple[str, int], tuple[str, int]]] = {
     "menlo": (
         ("/System/Library/Fonts/Menlo.ttc", 0),
@@ -74,7 +76,7 @@ def _pil():
 
 
 def available() -> bool:
-    """Pillow 是否可用。"""
+    """Whether Pillow is available."""
     try:
         _pil()
         return True
@@ -83,7 +85,9 @@ def available() -> bool:
 
 
 def find_font_file(family: str, bold: bool = True) -> tuple[str, int] | None:
-    """按 Tk 字体族名找对应的字体文件；找不到就按顺序挑一个存在的等宽字体。"""
+    """Look up the font file for a Tk family name; with no match, take the first monospace
+    font that exists, in preference order.
+    """
     if not available():
         return None
     key = (family or "").strip().lower()
@@ -101,7 +105,7 @@ def find_font_file(family: str, bold: bool = True) -> tuple[str, int] | None:
 
 
 def calibrate_px_size(wanted_pixel_height: float, font_path: str, font_index: int) -> int:
-    """把「想要的像素高度」换算成 PIL 的 font size。"""
+    """Convert the wanted pixel height into a PIL font size."""
     from PIL import ImageFont
 
     reference = ImageFont.truetype(font_path, 100, index=font_index)
@@ -119,7 +123,9 @@ def render_knockout(
     size_px: tuple[int, int],
     color: tuple[int, int, int],
 ):
-    """绿底 + 字镂空：整块填色，字的笔画处 alpha=0。"""
+    """Green block with knocked-out glyphs: fill the whole block, then set alpha=0
+    wherever the glyph strokes are.
+    """
     from PIL import Image, ImageDraw, ImageFont
 
     width, height = max(1, int(size_px[0])), max(1, int(size_px[1]))

@@ -1,14 +1,19 @@
-"""在 Tk 窗口上叠一个原生 AppKit 子视图，用来画「绿底 + 镂空字」。
+"""Draw the "green block with knocked-out glyphs" with a native AppKit subview layered
+over the Tk window.
 
-为什么需要这个：Tk 8.6 在 `-transparent` 窗口上**不会绘制任何图片**——`tk.Label(image=...)`
-和 `canvas.create_image(...)` 都实测为整片透明（同一张带 alpha 的 PNG 在不透明窗口里
-完全正常）。而「背景绿、字镂空」必须在位图里带 alpha 通道，纯 Tk 的 `fg=systemTransparent`
-也挖不出洞（实测像素数与 `fg=黑色` 逐点相同，即空操作）。
+Why this is needed: on a `-transparent` window Tk 8.6 **does not draw any image at
+all** - `tk.Label(image=...)` and `canvas.create_image(...)` both measured as
+entirely transparent (the very same alpha PNG is perfectly fine in an opaque
+window). And a "green background with knocked-out glyphs" needs an alpha channel
+inside the bitmap; plain Tk's `fg=systemTransparent` cannot punch holes either
+(measured pixel by pixel, identical to `fg=black`, i.e. a no-op).
 
-于是把这一行的位图交给 AppKit：`NSWindow.contentView` 上加一个 `NSImageView` 子视图，
-由它绘制带 alpha 的 PNG；子视图会比 Tk 自己的绘制更靠上层，镂空处直接透出桌面。
+So this one line's bitmap is handed to AppKit: an `NSImageView` subview is added to
+the `NSWindow.contentView` and draws the alpha PNG; the subview sits above Tk's own
+drawing, so the knocked-out strokes show the desktop straight through.
 
-非 macOS 或任何一步失败时 `available()` 返回 False，调用方回退成普通绿字。
+Off macOS, or if any step fails, `available()` returns False and the caller falls
+back to plain green text.
 """
 
 from __future__ import annotations
@@ -52,7 +57,7 @@ if _AVAILABLE:
             ctypes.c_char_p,
         ]
         _MSG = _objc.objc_msgSend
-    except Exception:  # pragma: no cover - 没有 ObjC 运行时
+    except Exception:  # pragma: no cover - no ObjC runtime
         _AVAILABLE = False
 
 
@@ -104,12 +109,13 @@ def _string(receiver, name: str) -> str:
     return raw.decode("utf-8", "replace") if raw else ""
 
 
-# 让子视图对鼠标完全透明，否则会挡住这一行的拖动
+# Make the subview completely transparent to the mouse, otherwise it swallows
+# drags on this line
 _HIT_TEST_IMP = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, _NSPoint)
 
 
 def _passthrough_class():
-    """NSImageView 子类，hitTest: 永远返回 nil（鼠标事件穿透给 Tk）。"""
+    """An NSImageView subclass whose hitTest: always returns nil (mouse events pass through to Tk)."""
     subclass = _objc.objc_allocateClassPair(_cls("NSImageView"), b"FloatClockImageView", 0)
     if not subclass:
         return _cls("NSImageView")
@@ -121,7 +127,7 @@ def _passthrough_class():
         b"@:@",
     )
     _objc.objc_registerClassPair(ctypes.c_void_p(subclass))
-    _PASSTHROUGH_IMP.append(imp)  # 必须保活，否则回调被回收会崩
+    _PASSTHROUGH_IMP.append(imp)  # keep it alive: a collected callback would crash
     return subclass
 
 
@@ -133,7 +139,7 @@ def available() -> bool:
 
 
 class KnockoutView:
-    """一个原生图片子视图；只在 macOS 上真正干活，其它平台是空实现。"""
+    """A native image subview; it only does real work on macOS, elsewhere it is an empty stub."""
 
     def __init__(self, window_title: str) -> None:
         self.window_title = window_title
@@ -146,7 +152,7 @@ class KnockoutView:
         self.hidden = True
         self.last_error = ""
 
-    # ------------------------------------------------------------------ 查找
+    # ----------------------------------------------------------------- lookup
     def _find_window(self):
         app = _ptr(_cls("NSApplication"), "sharedApplication")
         windows = _ptr(app, "windows")
@@ -157,17 +163,17 @@ class KnockoutView:
         return None
 
     def attach(self) -> bool:
-        """绑定到 Tk 窗口，建好子视图。"""
+        """Bind to the Tk window and create the subview."""
         if not _AVAILABLE:
             return False
         try:
             window = self._find_window()
             if not window:
-                self.last_error = "找不到标题匹配的 NSWindow"
+                self.last_error = "no NSWindow has a matching title"
                 return False
             content = _ptr(window, "contentView")
             if not content:
-                self.last_error = "contentView 为空"
+                self.last_error = "contentView is nil"
                 return False
             self._window = window
             self._content = content
@@ -193,12 +199,12 @@ class KnockoutView:
             self._view = view
             self.ok = True
             return True
-        except Exception as exc:  # pragma: no cover - 任何 ObjC 异常都退回纯 Tk
+        except Exception as exc:  # pragma: no cover - any ObjC failure falls back to plain Tk
             self.ok = False
             self.last_error = f"{type(exc).__name__}: {exc}"
             return False
 
-    # ------------------------------------------------------------------ 绘制
+    # ---------------------------------------------------------------- drawing
     def hide(self) -> None:
         self.hidden = True
         if self._view:
@@ -208,7 +214,9 @@ class KnockoutView:
                 pass
 
     def show_png(self, png: bytes, x: float, y: float, width: float, height: float) -> bool:
-        """把 PNG 贴到窗口坐标 (x, y)，尺寸按点给（位图按 scale 预渲染）。"""
+        """Put the PNG at window coordinates (x, y); the size is given in points (the bitmap
+        is pre-rendered at `scale`).
+        """
         if not self.ok or not self._view:
             return False
         try:
@@ -237,7 +245,8 @@ class KnockoutView:
             )
             _void(self._view, "setImage:", ctypes.c_void_p(image), argtypes=[ctypes.c_void_p])
 
-            # NSView 的 frame 用的是父视图坐标系；Tk 的内容视图是翻转的（原点在左上）
+            # An NSView's frame lives in its superview's coordinate system; Tk's content
+            # view is flipped (origin at the top left)
             top = y if self._flipped else (self._content_height() - y - height)
             _void(
                 self._view,
@@ -259,7 +268,7 @@ class KnockoutView:
 
 
 def encode_png(image) -> bytes:
-    """PIL 图像 → PNG 字节。"""
+    """PIL image -> PNG bytes."""
     import io
 
     buffer = io.BytesIO()

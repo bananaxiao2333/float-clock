@@ -1,3 +1,3 @@
-"""FloatClock —— 无背景悬浮 T± 倒计时浮窗。"""
+"""FloatClock — a borderless, transparent, always-on-top T± countdown overlay."""
 
 __version__ = "1.0.0"

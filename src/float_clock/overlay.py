@@ -1,15 +1,17 @@
-"""无背景悬浮 T± 倒计时窗口。
+"""The borderless, transparent T± countdown window.
 
-交互：
-* 左键拖动移动
-* 双击 打开设置窗口
-* 右键 锁定 / 解锁（外框线：实线=锁定，虚线=可拖动）
-* 中键 / Ctrl+右键 / Cmd+右键 打开菜单
-* Ctrl+L 锁定，Ctrl+, 设置，Ctrl+R 重载配置，Ctrl+Q 退出
+Interaction:
+* the left mouse button drags the window around
+* a double-click opens the settings window
+* the right mouse button locks / unlocks it (frame: solid = locked, dashed = draggable)
+* the middle button / Ctrl+right-click / Cmd+right-click opens the menu
+* Ctrl+L locks, Ctrl+, opens the settings, Ctrl+R reloads the config, Ctrl+Q quits
 
-macOS 注意：`overrideredirect` / `-transparent` 必须在窗口**映射之前**设置，
-并且最后用 `deiconify()` 一次性映射，否则系统会重新套上标题栏、透明也会失效。
-所以本模块统一走 withdraw → 配置 → 构建 → geometry → deiconify 的顺序。
+macOS note: `overrideredirect` / `-transparent` must be set **before the window is
+mapped**, and the window must then be mapped in one go with `deiconify()`,
+otherwise the system puts the title bar back and the transparency stops working.
+This module therefore always follows the order withdraw -> configure -> build ->
+geometry -> deiconify.
 """
 
 from __future__ import annotations
@@ -28,12 +30,13 @@ from .timefmt import format_hms, parse_duration, parse_target, render_info, spli
 
 __all__ = ["FloatingClock", "pick_mono_family"]
 
-# venv 里 Tcl 找不到 tcl8.6/tk8.6 数据目录，必须在 Tk() 之前修好
+# Tcl inside a venv cannot find the tcl8.6/tk8.6 data directories, so fix that before Tk()
 ensure_tcl_library()
 
-# Tk 9 的 macOS 回归：systemTransparent 被画成不透明黑，浮窗会变成黑底 + 拖影
+# A macOS regression in Tk 9: systemTransparent is painted as opaque black, which
+# turns the overlay into a black box with smeared text
 def macos_transparency_supported() -> bool:
-    """macOS 上 `systemTransparent` 能否真的透明（Tk 9.0 不行）。"""
+    """Whether `systemTransparent` is really transparent on macOS (it is not in Tk 9.0)."""
     if sys.platform != "darwin":
         return True
     return float(tk.TkVersion) < 9.0
@@ -53,14 +56,14 @@ MONO_CANDIDATES = (
     "Courier New",
 )
 
-_MOMENT_LABELS = {"main": "偏移时刻", "sub": "目标时间点"}
+_MOMENT_LABELS = {"main": "Offset moment", "sub": "Target time"}
 
 
 def pick_mono_family(root: tk.Misc) -> str:
-    """挑一个系统里真实存在的等宽字体。"""
+    """Pick a monospace font that really exists on this system."""
     try:
         available = set(tkfont.families(root))
-    except tk.TclError:  # pragma: no cover - 平台相关
+    except tk.TclError:  # pragma: no cover - platform dependent
         available = set()
     for name in MONO_CANDIDATES:
         if name in available:
@@ -97,10 +100,10 @@ class FloatingClock:
         self._config_mtime = self._current_mtime()
         self._closed = False
 
-        # 关键：窗口先藏起来，等一切配置好再一次性映射
+        # The key step: keep the window hidden and map it in one go once everything is configured
         self.root = tk.Tk()
         self.root.withdraw()
-        self.root.title("FloatClock 悬浮倒计时")
+        self.root.title("FloatClock")
 
         self.bg = self._configure_window()
         self._build_widgets()
@@ -116,19 +119,21 @@ class FloatingClock:
         if open_settings:
             self.root.after(300, self.open_settings)
 
-    # ------------------------------------------------------------------ 窗口
+    # ---------------------------------------------------------------- window
     def _configure_window(self) -> str:
-        """建立无边框置顶透明窗口。必须在窗口映射前调用。"""
+        """Create the borderless, always-on-top, transparent window. Must be called before
+        the window is mapped.
+        """
         window = self.cfg.window
 
         if window.borderless:
             try:
                 self.root.overrideredirect(True)
-                self.diagnostics["无边框"] = "已设置"
+                self.diagnostics["borderless"] = "set"
             except tk.TclError as exc:  # pragma: no cover
-                self.diagnostics["无边框"] = f"设置失败：{exc}"
+                self.diagnostics["borderless"] = f"failed to set it: {exc}"
         else:
-            self.diagnostics["无边框"] = "配置里关闭了"
+            self.diagnostics["borderless"] = "switched off in the config"
 
         back_color = ""
         if sys.platform == "darwin":
@@ -136,45 +141,56 @@ class FloatingClock:
                 self.root.configure(bg="systemTransparent")
                 self.root.wm_attributes("-transparent", True)
                 back_color = "systemTransparent"
-                self.diagnostics["透明背景"] = "macOS -transparent + systemTransparent"
+                self.diagnostics["transparent background"] = (
+                    "macOS -transparent + systemTransparent"
+                )
                 if not macos_transparency_supported():
-                    self.diagnostics["透明背景"] += (
-                        f"（⚠︎ Tk {tk.TkVersion} 的透明有 bug，会变成黑底）"
+                    self.diagnostics["transparent background"] += (
+                        f" (warning: transparency is broken in Tk {tk.TkVersion}"
+                        " and turns into a black box)"
                     )
             except tk.TclError as exc:
-                self.diagnostics["透明背景"] = f"失败：{exc}"
+                self.diagnostics["transparent background"] = f"failed: {exc}"
         elif sys.platform.startswith("win"):
             key = "#010203"
             try:
                 self.root.configure(bg=key)
                 self.root.wm_attributes("-transparentcolor", key)
                 back_color = key
-                self.diagnostics["透明背景"] = "Windows -transparentcolor 抠色"
+                self.diagnostics["transparent background"] = (
+                    "Windows -transparentcolor chroma key"
+                )
             except tk.TclError as exc:
-                self.diagnostics["透明背景"] = f"失败：{exc}"
+                self.diagnostics["transparent background"] = f"failed: {exc}"
         else:
-            self.diagnostics["透明背景"] = "当前平台不支持，用底色代替"
+            self.diagnostics["transparent background"] = (
+                "not supported on this platform, using a solid background instead"
+            )
 
         if not back_color:
             back_color = self.cfg.display.x11_background
-            self.diagnostics["透明背景"] = "回退为实心底色 " + back_color
+            self.diagnostics["transparent background"] = (
+                "falling back to the solid background " + back_color
+            )
 
         self.root.configure(bg=back_color)
         try:
             self.root.wm_attributes("-topmost", bool(window.topmost))
-            self.diagnostics["置顶"] = "开" if window.topmost else "关"
+            self.diagnostics["topmost"] = "on" if window.topmost else "off"
         except tk.TclError as exc:  # pragma: no cover
-            self.diagnostics["置顶"] = f"失败：{exc}"
+            self.diagnostics["topmost"] = f"failed: {exc}"
         if window.opacity < 1.0:
             try:
                 self.root.wm_attributes("-alpha", max(0.05, float(window.opacity)))
-                self.diagnostics["不透明度"] = f"{window.opacity}"
+                self.diagnostics["opacity"] = f"{window.opacity}"
             except tk.TclError:  # pragma: no cover
                 pass
         return back_color
 
     def _show(self) -> None:
-        """映射窗口，并再确认一次样式（有些系统的 deiconify 会把标题栏带回来）。"""
+        """Map the window and then assert the styling once more (on some systems deiconify
+        brings the title bar back).
+        """
         self.root.geometry(f"+{int(self.cfg.window.x)}+{int(self.cfg.window.y)}")
         self.root.update_idletasks()
         self.root.deiconify()
@@ -200,27 +216,30 @@ class FloatingClock:
         self._redraw_border()
 
     def window_report(self) -> str:
-        """给 --diagnose / 排障用的窗口状态报告。"""
+        """Window state report used by --diagnose and for troubleshooting."""
         root = self.root
         geom = root.wm_geometry()
         frame_x, frame_y = (int(v) for v in geom.split("+", 1)[1].split("+"))
         titlebar = root.winfo_rooty() - frame_y
         lines = [
-            f"平台            : {sys.platform}  Tk {tk.TkVersion} / Tcl {tk.TclVersion}",
-            f"窗口 geometry   : {geom}   内容原点 : {root.winfo_rootx()},{root.winfo_rooty()}",
-            f"标题栏高度      : {titlebar} px  {'✅ 无边框生效' if titlebar <= 1 else '❌ 仍有标题栏'}",
+            f"platform        : {sys.platform}  Tk {tk.TkVersion} / Tcl {tk.TclVersion}",
+            f"window geometry : {geom}   content origin : "
+            f"{root.winfo_rootx()},{root.winfo_rooty()}",
+            f"title bar height: {titlebar} px  "
+            f"{'✅ borderless is in effect' if titlebar <= 1 else '❌ the title bar is still there'}",
             f"overrideredirect: {root.overrideredirect()}",
-            f"透明背景        : {self.bg}"
-            f"（-transparent = {root.wm_attributes('-transparent')}）",
-            f"置顶            : {root.wm_attributes('-topmost')}",
-            f"字体            : {self.family}  主 {self.main_font.cget('size')}"
-            f" / 副 {self.sub_font.cget('size')} / 三 {self.info_font.cget('size')}"
+            f"transparent bg  : {self.bg}"
+            f" (-transparent = {root.wm_attributes('-transparent')})",
+            f"topmost         : {root.wm_attributes('-topmost')}",
+            f"font            : {self.family}  main {self.main_font.cget('size')}"
+            f" / sub {self.sub_font.cget('size')} / info {self.info_font.cget('size')}"
             f"  weight={self.main_font.actual('weight')}",
-            f"主标题          : {self.main_label.cget('text')}",
-            f"副标题          : {self.sub_label.cget('text')}",
-            f"第三行          : {self.info_label.cget('text')}",
-            f"锁定状态        : {'锁定（实线框）' if self.locked else '解锁（虚线框）'}",
-            f"通知后端        : {notify.backend()}",
+            f"main title      : {self.main_label.cget('text')}",
+            f"subtitle        : {self.sub_label.cget('text')}",
+            f"third line      : {self.info_label.cget('text')}",
+            f"lock state      : "
+            f"{'locked (solid frame)' if self.locked else 'unlocked (dashed frame)'}",
+            f"notify via      : {notify.backend()}",
         ]
         for key, value in self.diagnostics.items():
             lines.append(f"{key:<16s}: {value}")
@@ -240,7 +259,7 @@ class FloatingClock:
             root=self.root, family=self.family, size=int(display.info_size), weight=weight
         )
 
-        # 外框线画布在最底层，内容 Frame 叠在它上面
+        # The frame canvas sits at the very bottom, with the content Frame stacked on top
         self.border_canvas = tk.Canvas(
             self.root, bg=self.bg, highlightthickness=0, bd=0, takefocus=0
         )
@@ -271,7 +290,8 @@ class FloatingClock:
         )
         self.sub_label.pack(anchor="center", pady=(int(display.gap), 0))
 
-        # 第三行：目标时间点 + 偏移（绿字、透明底，和前两行同款）
+        # Third line: target time plus offset (green text on a transparent background,
+        # exactly like the two lines above)
         self.info_label = tk.Label(
             self.frame,
             text=" ",
@@ -284,11 +304,13 @@ class FloatingClock:
         self.info_label.pack(anchor="center", pady=(int(display.gap), 0))
 
         self.menu = tk.Menu(self.root, tearoff=0)
-        self.menu.add_command(label="锁定 / 解锁", command=self.toggle_lock)
-        self.menu.add_command(label="设置…", command=self.open_settings)
-        self.menu.add_command(label="重载配置", command=lambda: self.reload_config(force=True))
+        self.menu.add_command(label="Lock / Unlock", command=self.toggle_lock)
+        self.menu.add_command(label="Settings…", command=self.open_settings)
+        self.menu.add_command(
+            label="Reload config", command=lambda: self.reload_config(force=True)
+        )
         self.menu.add_separator()
-        self.menu.add_command(label="退出", command=self.quit)
+        self.menu.add_command(label="Quit", command=self.quit)
 
         self.frame.bind("<Configure>", lambda _e: self._redraw_border())
 
@@ -312,7 +334,7 @@ class FloatingClock:
             for sequence in ("<Command-Button-3>", "<Mod1-Button-3>"):
                 try:
                     widget.bind(sequence, self._on_menu)
-                except tk.TclError:  # pragma: no cover - 该平台不支持这个修饰键
+                except tk.TclError:  # pragma: no cover - this platform has no such modifier
                     pass
 
         self.root.bind("<Control-l>", lambda _e: self.toggle_lock())
@@ -322,7 +344,7 @@ class FloatingClock:
         self.root.bind("<Control-q>", lambda _e: self.quit())
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
 
-    # ------------------------------------------------------------ 外框锁定指示
+    # ------------------------------------------------------- lock indicator frame
     def _border_inset(self) -> int:
         display = self.cfg.display
         if display.lock_indicator != "border":
@@ -330,7 +352,7 @@ class FloatingClock:
         return max(0, int(display.border_width)) + 2
 
     def _redraw_border(self) -> None:
-        """锁定状态不用文字提示，改用外框线的实线 / 虚线表示。"""
+        """The lock state is not announced in text; the solid / dashed frame shows it instead."""
         display = self.cfg.display
         canvas = self.border_canvas
         canvas.delete("all")
@@ -358,7 +380,7 @@ class FloatingClock:
             dash=() if solid else (4, 3),
         )
 
-    # -------------------------------------------------------------- 鼠标交互
+    # ------------------------------------------------------------- mouse input
     def _on_press(self, event: tk.Event) -> None:
         self.root.update_idletasks()
         self._drag_origin = (
@@ -372,7 +394,7 @@ class FloatingClock:
         if self._drag_origin is None:
             return
         if self.locked:
-            return  # 锁定状态由外框实线表示，不再弹文字
+            return  # the solid frame already says "locked", so no text popup
         start_x, start_y, win_x, win_y = self._drag_origin
         x = win_x + (event.x_root - start_x)
         y = win_y + (event.y_root - start_y)
@@ -393,13 +415,13 @@ class FloatingClock:
         self.open_settings()
 
     def _on_menu(self, event: tk.Event) -> None:
-        self.menu.entryconfigure(0, label="解锁" if self.locked else "锁定")
+        self.menu.entryconfigure(0, label="Unlock" if self.locked else "Lock")
         try:
             self.menu.tk_popup(event.x_root, event.y_root)
         finally:
             self.menu.grab_release()
 
-    # ------------------------------------------------------------ 配置与状态
+    # ------------------------------------------------------- config and state
     def _persist_position(self) -> None:
         x = self.root.winfo_x()
         y = self.root.winfo_y()
@@ -408,7 +430,7 @@ class FloatingClock:
         try:
             patch_toml(self.cfg.path, {"window.x": x, "window.y": y})
         except OSError as exc:
-            self._report_error(f"位置保存失败：{exc}")
+            self._report_error(f"could not save the position: {exc}")
             return
         self.cfg.window.x = x
         self.cfg.window.y = y
@@ -418,7 +440,7 @@ class FloatingClock:
         try:
             patch_toml(self.cfg.path, {"window.locked": self.locked})
         except OSError as exc:
-            self._report_error(f"锁定状态保存失败：{exc}")
+            self._report_error(f"could not save the lock state: {exc}")
             return
         self.cfg.window.locked = self.locked
         self._config_mtime = self._current_mtime()
@@ -437,8 +459,8 @@ class FloatingClock:
             new = load_config(path)
             target = parse_target(new.time.target, datetime.now())
             offset = parse_duration(new.time.offset)
-        except Exception as exc:  # noqa: BLE001 - 用户输入问题，直接提示
-            self._report_error(f"配置有误：{exc}")
+        except Exception as exc:  # noqa: BLE001 - a user input problem: just report it
+            self._report_error(f"bad configuration: {exc}")
             self._config_mtime = self._current_mtime()
             return
 
@@ -484,17 +506,17 @@ class FloatingClock:
         self._update_info_style()
         self._apply_lock_visual()
 
-    # -------------------------------------------------------------- 锁定状态
+    # ------------------------------------------------------------ lock state
     def toggle_lock(self) -> None:
         self.locked = not self.locked
         self._apply_lock_visual()
         self._persist_lock()
 
     def _apply_lock_visual(self) -> None:
-        """锁定只用外框线区分：实线=锁定，虚线=可拖动。"""
+        """The frame alone distinguishes the lock state: solid = locked, dashed = draggable."""
         self._redraw_border()
 
-    # ------------------------------------------------------------------ 提醒
+    # ------------------------------------------------------------- reminders
     def _arm(self, now: datetime) -> None:
         self.notifier.config = self.cfg.notify
         self.notifier.arm(
@@ -505,14 +527,16 @@ class FloatingClock:
             now,
         )
 
-    # ------------------------------------------------------------------ 渲染
+    # ------------------------------------------------------------- rendering
     def _report_error(self, message: str) -> None:
-        """窗口上不再有第三行，出错走 stderr + 系统通知，同一条只提醒一次。"""
+        """The window no longer has a line for errors, so one goes to stderr plus a system
+        notification, and every distinct message is announced only once.
+        """
         self.last_error = message
         print(f"[float-clock] {message}", file=sys.stderr)
         if message != self._notified_error:
             self._notified_error = message
-            notify.send_async("FloatClock 出错", message)
+            notify.send_async("FloatClock error", message)
 
     @staticmethod
     def _compose(template: str, sign: str, clock: str) -> str:
@@ -541,9 +565,11 @@ class FloatingClock:
             self._knockout_state = None
         self._update_info_style()
 
-    # -------------------------------------------------------------- 第三行内容
+    # -------------------------------------------------------- third line content
     def info_line_text(self) -> str:
-        """第三行：目标时间点 + 偏移。留空模板则整行不占位。"""
+        """Third line: target time plus offset. An empty template makes the whole line take
+        up no space at all.
+        """
         template = self.cfg.display.info_template
         if not template.strip():
             return " "
@@ -555,9 +581,11 @@ class FloatingClock:
             self.cfg.display.show_days,
         )
 
-    # ------------------------------------------------- 第三行：绿底 + 镂空字
+    # --------------------------------------------- third line: green knockout block
     def _knockout_wanted(self) -> bool:
-        """要不要用原生叠层画第三行（auto 时只在支持的平台上启用）。"""
+        """Whether the third line should be drawn by the native overlay (in auto mode it is
+        only enabled on platforms that support it).
+        """
         style = self.cfg.display.info_style
         if style == "text":
             return False
@@ -569,8 +597,10 @@ class FloatingClock:
         return self.cfg.display.info_style != "text" and self._knockout is not None
 
     def _setup_knockout(self) -> None:
-        """挂载原生叠层。幂等：已经挂好且字体没变就直接返回。"""
-        # 窗口还没映射时 NSWindow 可能还不存在，等 _show() 之后再挂
+        """Attach the native overlay. Idempotent: if it is already attached and the font has
+        not changed, return straight away.
+        """
+        # Before the window is mapped the NSWindow may not exist yet, so attach after _show()
         if not self._window_shown or not self._knockout_wanted():
             return
         bold = bool(self.cfg.display.bold)
@@ -580,14 +610,18 @@ class FloatingClock:
                 return
         face = knockout.find_font_file(self.cfg.display.font_family or self.family, bold)
         if face is None:
-            self._report_error("找不到可用的等宽字体文件，第三行回退为普通绿字")
+            self._report_error(
+                "no usable monospace font file found, falling back to plain green text"
+                " for the third line"
+            )
             return
         if self._knockout is None:
             view = macos_overlay.KnockoutView(self.root.title())
             if not view.attach():
                 self._report_error(
-                    f"无法在窗口上挂载原生叠层（{view.last_error or '未知原因'}），"
-                    "第三行回退为普通绿字"
+                    "could not attach the native overlay to the window"
+                    f" ({view.last_error or 'unknown reason'}); the third line falls"
+                    " back to plain green text"
                 )
                 return
             self._knockout = view
@@ -595,10 +629,12 @@ class FloatingClock:
         self._knockout_state = None
 
     def _update_info_style(self) -> None:
-        """决定第三行由谁画：原生叠层（绿底镂空）还是普通绿字。"""
+        """Decide who draws the third line: the native overlay (green block, knocked out) or
+        plain green text.
+        """
         by_knockout = self._knockout_by_style() and self._font_face is not None
         if by_knockout:
-            self.info_label.configure(fg=self.bg)  # 只占位，真正画的是原生叠层
+            self.info_label.configure(fg=self.bg)  # placeholder: the native overlay paints
             if self._info_text.strip():
                 self._place_knockout(self._info_text)
             else:
@@ -641,7 +677,7 @@ class FloatingClock:
         if self._knockout.show_png(self._knockout_png, x, y, width, height):
             self._knockout_state = state
 
-    # ------------------------------------------------------------------ 主循环
+    # --------------------------------------------------------------- main loop
     def _tick(self) -> None:
         if self._closed:
             return
@@ -666,7 +702,7 @@ class FloatingClock:
         except tk.TclError:  # pragma: no cover
             pass
 
-    # ------------------------------------------------------------------ 设置
+    # --------------------------------------------------------------- settings
     def open_settings(self) -> None:
         if self._settings is not None and self._settings.winfo_exists():
             self._settings.lift()
@@ -675,17 +711,17 @@ class FloatingClock:
 
         win = tk.Toplevel(self.root)
         self._settings = win
-        win.title("FloatClock 设置")
+        win.title("FloatClock settings")
         win.configure(bg="#1c1c1e", padx=16, pady=14)
         win.resizable(False, False)
         win.attributes("-topmost", True)
 
         rows = [
-            ("target", "目标时间点", self.cfg.time.target),
-            ("offset", "偏移", self.cfg.time.offset),
-            ("color", "绿色", self.cfg.display.color),
-            ("main_size", "主标题字号", str(self.cfg.display.main_size)),
-            ("sub_size", "副标题字号", str(self.cfg.display.sub_size)),
+            ("target", "Target time", self.cfg.time.target),
+            ("offset", "Offset", self.cfg.time.offset),
+            ("color", "Colour", self.cfg.display.color),
+            ("main_size", "Title size", str(self.cfg.display.main_size)),
+            ("sub_size", "Subtitle size", str(self.cfg.display.sub_size)),
         ]
         entries: dict[str, tk.Entry] = {}
         for index, (key, label, value) in enumerate(rows):
@@ -706,7 +742,7 @@ class FloatingClock:
 
         tk.Label(
             win,
-            text="改动会写回 config.toml（保留注释），立刻生效",
+            text="Changes are written back into config.toml (comments kept), effective at once",
             bg="#1c1c1e",
             fg="#8e8e93",
         ).grid(row=len(rows), column=0, columnspan=2, sticky="w", pady=(8, 10))
@@ -719,7 +755,7 @@ class FloatingClock:
                 sub_size = int(entries["sub_size"].get())
                 color = entries["color"].get().strip() or "#00FF66"
             except Exception as exc:  # noqa: BLE001
-                messagebox.showerror("输入有误", str(exc), parent=win)
+                messagebox.showerror("Invalid input", str(exc), parent=win)
                 return
             updates = {
                 "time.target": entries["target"].get().strip(),
@@ -731,7 +767,7 @@ class FloatingClock:
             try:
                 patch_toml(self.cfg.path, updates)
             except OSError as exc:
-                messagebox.showerror("无法写入配置", str(exc), parent=win)
+                messagebox.showerror("Cannot write the config", str(exc), parent=win)
                 return
             self.reload_config(force=True)
             win.destroy()
@@ -739,8 +775,8 @@ class FloatingClock:
 
         buttons = tk.Frame(win, bg="#1c1c1e")
         buttons.grid(row=len(rows) + 1, column=0, columnspan=2, sticky="e")
-        tk.Button(buttons, text="应用", command=apply, width=8).pack(side="left", padx=4)
-        tk.Button(buttons, text="取消", command=win.destroy, width=8).pack(side="left")
+        tk.Button(buttons, text="Apply", command=apply, width=8).pack(side="left", padx=4)
+        tk.Button(buttons, text="Cancel", command=win.destroy, width=8).pack(side="left")
 
         win.bind("<Return>", lambda _e: apply())
         win.bind("<Escape>", lambda _e: win.destroy())

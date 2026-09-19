@@ -1,9 +1,11 @@
-"""修正 venv 里 Tcl/Tk 的脚本库搜索路径。
+"""Fix the Tcl/Tk script library search path inside a venv.
 
-python-build-standalone 的解释器把 ``tcl8.6`` / ``tk8.6`` 数据目录放在**基础前缀**的
-``lib/`` 下，但从 venv 里启动时 Tcl 只会在 venv 前缀里找，于是报
-``Can't find a usable init.tcl``。这里在创建 ``Tk()`` 之前把 ``TCL_LIBRARY`` /
-``TK_LIBRARY`` 指过去（已有的环境变量不覆盖）。
+A python-build-standalone interpreter keeps its ``tcl8.6`` / ``tk8.6`` data
+directories under ``lib/`` in the **base prefix**, but when Tcl starts up from a
+venv it only looks inside the venv prefix and then reports
+``Can't find a usable init.tcl``. So before ``Tk()`` is created, point
+``TCL_LIBRARY`` / ``TK_LIBRARY`` at the right place (an existing environment
+variable is never overwritten).
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ def _first_dir(root: Path, pattern: str, marker: str) -> Path | None:
 
 
 def ensure_tcl_library() -> dict[str, str]:
-    """按需设置 TCL_LIBRARY / TK_LIBRARY，返回本次实际设置的值。"""
+    """Set TCL_LIBRARY / TK_LIBRARY when needed and return the values actually set this time."""
     applied: dict[str, str] = {}
     library = Path(sys.base_prefix) / "lib"
     for var, pattern, marker in (

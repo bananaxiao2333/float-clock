@@ -1,4 +1,4 @@
-"""跨平台系统通知（零依赖，全部走系统自带命令）。"""
+"""Cross-platform system notifications (zero dependencies, all through the OS's own commands)."""
 
 from __future__ import annotations
 
@@ -14,15 +14,16 @@ _TIMEOUT = 10
 
 
 def backend() -> str:
-    """当前平台实际会用的通知后端，供 --diagnose / --test-notify 显示。
+    """The notification backend actually used on this platform, shown by --diagnose / --test-notify.
 
-    通知图标由系统按「发送通知的程序」决定，三个后端都不提供自定义图标的接口，
-    所以这里不做任何平台特有的图标处理。
+    The notification icon is decided by the system from the program that sends the
+    notification; none of the three backends exposes an interface for a custom icon,
+    so no platform-specific icon handling happens here.
     """
     if sys.platform == "darwin":
         if shutil.which("terminal-notifier"):
             return "terminal-notifier"
-        return "osascript（系统会把发送者认成「脚本编辑器」）"
+        return "osascript (the system attributes the sender to 'Script Editor')"
     if sys.platform.startswith("win"):
         return "PowerShell WinRT Toast"
     return "notify-send"
@@ -117,7 +118,7 @@ def _send_linux(title: str, body: str, sound: str | None) -> bool:
 
 
 def send(title: str, body: str, sound: str | None = None) -> bool:
-    """同步发送一条系统通知。失败返回 False 并打印到 stderr。"""
+    """Send one system notification synchronously. Returns False and prints to stderr on failure."""
     try:
         if sys.platform == "darwin":
             ok = _send_macos(title, body, sound)
@@ -125,16 +126,16 @@ def send(title: str, body: str, sound: str | None = None) -> bool:
             ok = _send_windows(title, body, sound)
         else:
             ok = _send_linux(title, body, sound)
-    except Exception as exc:  # pragma: no cover - 平台相关
-        print(f"[float-clock] 发送通知失败：{exc}", file=sys.stderr)
+    except Exception as exc:  # pragma: no cover - platform dependent
+        print(f"[float-clock] failed to send notification: {exc}", file=sys.stderr)
         return False
     if not ok:
-        print(f"[float-clock] {title} — {body}", file=sys.stderr)
+        print(f"[float-clock] {title} - {body}", file=sys.stderr)
     return ok
 
 
 def send_async(title: str, body: str, sound: str | None = None) -> None:
-    """后台线程发送，避免阻塞 Tk 主循环。"""
+    """Send from a background thread so the Tk main loop is not blocked."""
     threading.Thread(
         target=send, args=(title, body, sound), daemon=True
     ).start()

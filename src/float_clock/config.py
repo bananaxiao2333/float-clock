@@ -1,4 +1,4 @@
-"""配置：TOML 读取、默认值合并、保留注释的回写、默认配置生成。"""
+"""Configuration: TOML loading, default merging, comment-preserving write-back, default config generation."""
 
 from __future__ import annotations
 
@@ -47,17 +47,18 @@ class DisplayConfig:
     bold: bool = True
     show_days: bool = True
     gap: int = 2
-    # 第三行：显示目标时间点与偏移（同样绿字、透明底）
-    info_template: str = "{time} · {delta}"
+    # third line: shows the target time and the offset (same green text, transparent background)
+    info_template: str = "{time} | {delta}"
     info_size: int = 14
     info_color: str = ""
-    # 第三行样式：auto = 有原生叠层就镂空、否则普通绿字；knockout / text 强制指定
+    # third-line style: auto = knock out when a native overlay is available, otherwise plain green
+    # text; knockout / text force one of the two
     info_style: str = "auto"
     x11_background: str = "#101010"
     interval_ms: int = 200
     main_template: str = "T{sign}{clock}"
     sub_template: str = "T{sign}{clock}"
-    # 锁定状态用外框线表示：实线=锁定，虚线=可拖动
+    # the locked state is shown by an outline: solid = locked, dashed = draggable
     lock_indicator: str = "border"
     border_color: str = ""
     border_width: int = 2
@@ -80,11 +81,11 @@ class NotifyConfig:
     at_moment: bool = True
     sound: bool = True
     sound_name: str = "Glass"
-    # 文案模板，纯文本，用 [] 这类符号做装饰
+    # copy templates, plain text, decorated with symbols such as []
     title_template: str = "[T{sign}{clock}] {label}"
-    body_before: str = "距离{label}还有 {human}"
-    body_at: str = "{label}已到 · {time}"
-    body_after: str = "{label}已过去 {human}"
+    body_before: str = "{human} until {label}"
+    body_at: str = "{label} reached at {time}"
+    body_after: str = "{label} passed {human} ago"
 
 
 @dataclass
@@ -109,7 +110,7 @@ def default_config_path() -> Path:
 
 
 def _fill(dataclass_type: type, raw: dict[str, Any]) -> Any:
-    """按 dataclass 字段挑出配置里认识的键，类型尽量对齐。"""
+    """Pick the keys the dataclass knows out of the config, coercing types as closely as possible."""
     known = {f.name: f for f in fields(dataclass_type)}
     kwargs: dict[str, Any] = {}
     for key, value in raw.items():
@@ -131,7 +132,7 @@ def _fill(dataclass_type: type, raw: dict[str, Any]) -> Any:
 
 
 def load_config(path: Path) -> Config:
-    """读取配置；文件不存在或某段缺失时用默认值补齐。"""
+    """Read the config; a missing file or a missing section falls back to the defaults."""
     path = Path(path)
     raw: dict[str, Any] = {}
     if path.exists():
@@ -159,9 +160,10 @@ _KEY_RE = re.compile(r"^([A-Za-z0-9_-]+)\s*=")
 
 
 def patch_toml(path: Path, updates: dict[str, Any]) -> None:
-    """就地把 ``"节.键": 值`` 写回 TOML，保留注释与原有顺序。
+    """Write ``"section.key": value`` back into the TOML in place, preserving comments and existing order.
 
-    缺失的键会追加到对应小节末尾；小节不存在则新建。
+    A missing key is appended at the end of its section; a section that does not
+    exist yet is created.
     """
     path = Path(path)
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
@@ -193,14 +195,14 @@ def patch_toml(path: Path, updates: dict[str, Any]) -> None:
             out.append(line)
             continue
         if target_section not in seen_sections:
-            # 小节不存在：新建，键直接跟在节头后面
+            # the section does not exist: create it and put the key right after the header
             if out and out[-1].strip():
                 out.append("")
             out.append(f"[{target_section}]")
             out.append(line)
             seen_sections.append(target_section)
             continue
-        # 小节已存在：插到该节最后一行键的后面
+        # the section exists: insert after the section's last key line
         insert_at = len(out)
         for index, existing in enumerate(out):
             if existing.strip() != f"[{target_section}]":
@@ -218,107 +220,107 @@ def patch_toml(path: Path, updates: dict[str, Any]) -> None:
 
 
 TEMPLATE = """\
-# FloatClock 悬浮倒计时配置
-# 改完保存即可，程序约 1 秒内自动重载（无需重启）。
-# 命令行 --target / --offset 可临时覆盖本文件。
+# FloatClock floating countdown configuration
+# Edit and save; the program reloads within about a second (no restart needed).
+# The --target / --offset command-line flags temporarily override this file.
 
 [window]
-# 浮窗左上角坐标（拖动后会自动写回这里）
+# Floating window top-left corner (written back here automatically after a drag)
 x = {x}
 y = {y}
-# 去掉标题栏，配合透明背景实现「只有文字」的悬浮效果
+# Drop the title bar; together with a transparent background this gives the "text only" floating look
 borderless = true
-# 永远置顶
+# Always on top
 topmost = true
-# 锁定后不能拖动（右键随时切换；锁定状态也会写回这里）
+# A locked window cannot be dragged (right-click toggles it at any time; the locked state is written back here too)
 locked = false
-# 整体不透明度 0.05~1.0（透明背景已够用，一般保持 1.0）
+# Overall opacity 0.05~1.0 (the transparent background is usually enough, keep 1.0 in normal use)
 opacity = 1.0
 
 [display]
-# 等宽字体；留空自动挑选系统等宽字体（Menlo / Consolas / DejaVu Sans Mono ...）
+# Monospace font; leave empty to pick a system monospace font automatically (Menlo / Consolas / DejaVu Sans Mono ...)
 font_family = ""
-# 主标题（距离偏移还有多久）字号
+# Main title (how long until the offset moment) font size
 main_size = 46
-# 副标题（距离目标时间点过去了多久）字号
+# Subtitle (how long ago the target time passed) font size
 sub_size = 18
-# 绿色粗体
+# Green and bold
 color = "#00FF66"
-# 副标题颜色，留空表示跟主标题一致
+# Subtitle colour; leave empty to match the main title
 sub_color = ""
 bold = true
-# 超过一天时显示 DD:HH:MM:SS（所有位都补 0 对齐）
+# Show DD:HH:MM:SS once the duration exceeds a day (every field zero-padded for alignment)
 show_days = true
-# 主副标题之间的间距（像素）
+# Gap between the main title and the subtitle (pixels)
 gap = 2
-# 第三行：目标时间点 + 偏移（同样绿字、透明底）。设成空字符串 "" 则整行不显示。
-# 可用占位符：
-#   {{date}} {{time}} {{datetime}}    目标时间点 T
-#   {{mark}} {{mark_datetime}}      偏移时刻 M = T + offset
-#   {{delta}}                   偏移的补零写法，如 +02:00:00
-#   {{delta_human}}             偏移的中文写法，如 +2 小时
-info_template = "{{time}} · {{delta}}"
-# 第三行字号
+# Third line: target time + offset (same green text, transparent background). Set it to the empty string "" to hide the whole line.
+# Available placeholders:
+#   {{date}} {{time}} {{datetime}}    target time T
+#   {{mark}} {{mark_datetime}}      offset moment M = T + offset
+#   {{delta}}                   zero-padded offset, e.g. +02:00:00
+#   {{delta_human}}             compact English offset, e.g. +2h
+info_template = "{{time}} | {{delta}}"
+# Third-line font size
 info_size = 14
-# 第三行颜色，留空 = 跟主标题一致（绿色）
+# Third-line colour; leave empty = same as the main title (green)
 info_color = ""
-# 第三行样式：
-#   "auto"     = 有原生叠层（macOS）就镂空，其它平台自动用普通绿字
-#   "knockout" = 强制镂空（非 macOS 会退回普通绿字）
-#   "text"     = 强制普通绿字、透明底
+# Third-line style:
+#   "auto"     = knock out when a native overlay is available (macOS), plain green text elsewhere
+#   "knockout" = force knockout (falls back to plain green text off macOS)
+#   "text"     = force plain green text on a transparent background
 info_style = "auto"
-# Linux 等不支持透明背景的平台上用的底色
+# Background colour used on platforms without transparent background support, Linux for instance
 x11_background = "#101010"
-# 刷新间隔（毫秒）
+# Refresh interval (milliseconds)
 interval_ms = 200
-# 锁定状态指示：border = 用外框线表示（实线=锁定，虚线=可拖动），none = 不显示
+# Lock indicator: border = show an outline (solid = locked, dashed = draggable), none = hide it
 lock_indicator = "border"
-# 外框线颜色，留空 = 跟文字同色
+# Outline colour; leave empty = same colour as the text
 border_color = ""
-# 外框线宽（像素）
+# Outline width (pixels)
 border_width = 2
-# true：锁定时实线、解锁时虚线；false 反过来
+# true: solid while locked and dashed while unlocked; false is the other way round
 solid_when_locked = true
-# 显示模板：{{sign}} 就是 + / -，{{clock}} 是补零时间
+# Display templates: {{sign}} is + / -, {{clock}} is the zero-padded time
 main_template = "T{{sign}}{{clock}}"
 sub_template = "T{{sign}}{{clock}}"
 
 [time]
-# 目标时间点。支持：
+# Target time. Supported:
 #   2026-01-01T09:30:00   2026-01-01 09:30   2026-01-01
-#   09:30:00（今天该时刻，已过则自动顺延到明天 —— 每天重复的日程用这种写法）
-#   +1h30m（相对现在）
-# 绝对时间点过去之后，显示会自然翻转成 T+…
+#   09:30:00 (that clock time today, rolled over to tomorrow once it has passed; use this form for a daily repeating schedule)
+#   +1h30m (relative to now)
+# Once an absolute target time has passed, the display flips over to T+... on its own
 target = "{target}"
-# 偏移。主标题倒计时指向的时刻 = 目标时间点 + 偏移。
-# 支持 -00:05:00 / 5:00 / 1h30m / -300 / 0 等写法
+# Offset. The moment the main title counts down to = target time + offset.
+# Accepts forms such as -00:05:00 / 5:00 / 1h30m / -300 / 0
 offset = "{offset}"
 
 [notify]
-# 总开关
+# Master switch
 enabled = true
-# 在每个时间点【之前】这些秒数各提醒一次
+# Notify once before every moment, at each of these numbers of seconds
 before = [3600, 1800, 900, 600, 300, 180, 120, 60, 30, 10, 5, 3, 2, 1]
-# 在每个时间点【之后】这些秒数各提醒一次
+# Notify once after every moment, at each of these numbers of seconds
 after = [1, 5, 30, 60, 300]
-# 正点提醒
+# Notify exactly on the moment
 at_moment = true
-# 通知声音
+# Notification sound
 sound = true
-# macOS 提示音：Glass / Ping / Pop / Funk / Basso / Blow / Bottle / Frog / Hero / Morse / Purr / Sosumi / Submarine / Tink
+# macOS alert sounds: Glass / Ping / Pop / Funk / Basso / Blow / Bottle / Frog / Hero / Morse / Purr / Sosumi / Submarine / Tink
 sound_name = "Glass"
-# 通知文案模板（纯文本，不带 emoji，用 [] 这类符号做装饰）。占位符：
-#   {{label}} 时间点名称   {{sign}} - 或 +   {{clock}} 补零时间   {{human}} 人话时长
-#   {{time}} 该时刻 HH:MM:SS   {{datetime}} 该时刻完整时间
+# Notification copy templates (plain text, no emoji, decorated with symbols such as []). Placeholders:
+#   {{label}} moment name   {{sign}} - or +   {{clock}} zero-padded time   {{human}} human-readable duration
+#   {{time}} HH:MM:SS of that moment   {{datetime}} full timestamp of that moment
 title_template = "[T{{sign}}{{clock}}] {{label}}"
-body_before = "距离{{label}}还有 {{human}}"
-body_at = "{{label}}已到 · {{time}}"
-body_after = "{{label}}已过去 {{human}}"
+body_before = "{{human}} until {{label}}"
+body_at = "{{label}} reached at {{time}}"
+body_after = "{{label}} passed {{human}} ago"
 """
 
 
 def default_target(now: datetime | None = None) -> str:
-    """默认目标时间点：下一个整点。"""
+    """Default target time: the next whole hour."""
     now = now or datetime.now()
     nxt = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
     return nxt.strftime("%Y-%m-%dT%H:%M:%S")

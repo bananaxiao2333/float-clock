@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   test:
-    name: 单元测试
+    name: Unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,15 +21,16 @@ jobs:
         with:
           enable-cache: true
 
-      - name: 安装依赖
+      - name: Install dependencies
         run: uv sync --group dev
 
-      # 只跑纯逻辑的单元测试：Tk 冒烟测试（test_overlay_smoke.py）需要真实显示器，
-      # 在那台机器上单独跑 `uv run python -m unittest discover -s tests -v`。
-      - name: 单元测试
+      # Only the pure-logic unit tests run here: the Tk smoke tests (test_overlay_smoke.py)
+      # need a real display, so run `uv run python -m unittest discover -s tests -v`
+      # separately on such a machine.
+      - name: Unit tests
         run: uv run python -m unittest discover -s tests -p "test_float_clock.py" -v
 
-      - name: 冒烟：命令行能起来
+      - name: "Smoke test: the command line starts up"
         run: |
           uv run float-clock --version
           uv run float-clock --init-config --config ./smoke.toml

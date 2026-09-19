@@ -1,4 +1,4 @@
-"""命令行入口。"""
+"""Command-line entry point."""
 
 from __future__ import annotations
 
@@ -21,38 +21,47 @@ from .timefmt import format_hms, parse_duration, parse_target, render_info, spli
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="float-clock",
-        description="无背景悬浮 T± 倒计时浮窗（绿色粗体等宽字体 / 可拖动 / 右键锁定 / 临近时间点系统通知）",
+        description=(
+            "Borderless, transparent T± countdown overlay"
+            " (bold green monospace text / draggable / right-click to lock"
+            " / system notifications near each moment)"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "示例：\n"
+            "Examples:\n"
             "  uv run float-clock --init-config\n"
             '  uv run float-clock --target "2026-01-01 09:30" --offset -00:05:00\n'
-            "  uv run float-clock --print            # 不开窗口，只打印当前 T± 与提醒计划\n"
+            "  uv run float-clock --print            "
+            "# print the current T± state and the reminder schedule, no window\n"
         ),
     )
-    parser.add_argument("--config", type=Path, help="配置文件路径（默认 ./config.toml）")
-    parser.add_argument("--init-config", action="store_true", help="生成默认配置后退出")
-    parser.add_argument("--force", action="store_true", help="配合 --init-config，覆盖已有配置")
-    parser.add_argument("--target", help="目标时间点，如 '2026-01-01T09:30:00' / '09:30' / '+1h'")
-    parser.add_argument("--offset", help="偏移，如 '-00:05:00' / '1h30m' / '-300'")
-    parser.add_argument("--settings", action="store_true", help="启动后直接打开设置窗口")
-    parser.add_argument("--print", dest="print_only", action="store_true", help="只打印状态，不打开窗口")
-    parser.add_argument("--selftest", type=float, metavar="SECONDS", help="打开窗口 N 秒后自动退出（自检用）")
-    parser.add_argument("--test-notify", action="store_true", help="发一条测试通知后退出")
+    parser.add_argument("--config", type=Path, help="path to the config file (default ./config.toml)")
+    parser.add_argument("--init-config", action="store_true", help="write a default config file, then exit")
+    parser.add_argument("--force", action="store_true", help="with --init-config, overwrite an existing config")
+    parser.add_argument("--target", help="target time T, e.g. '2026-01-01T09:30:00' / '09:30' / '+1h'")
+    parser.add_argument("--offset", help="offset, e.g. '-00:05:00' / '1h30m' / '-300'")
+    parser.add_argument("--settings", action="store_true", help="open the settings window on startup")
+    parser.add_argument("--print", dest="print_only", action="store_true", help="print the state only, without opening a window")
+    parser.add_argument("--selftest", type=float, metavar="SECONDS", help="close the window automatically after N seconds (self-check)")
+    parser.add_argument("--test-notify", action="store_true", help="send one test notification, then exit")
     parser.add_argument(
         "--diagnose",
         action="store_true",
-        help="打开窗口 1 秒后打印窗口状态（无边框 / 透明是否真的生效）并退出",
+        help=(
+            "print the window state one second after it opens"
+            " (whether borderless / transparent really took effect), then exit"
+        ),
     )
     parser.add_argument("--version", action="version", version=f"float-clock {__version__}")
     return parser
 
 
 def _normalize_argv(argv: list[str]) -> list[str]:
-    """让 ``--offset -00:05:00`` 这种以负号开头的取值不被 argparse 当成选项。
+    """Keep a negative value such as ``--offset -00:05:00`` from being read as an option.
 
-    argparse 只认 ``-1`` / ``-1.5`` 形式的负数，``-00:05:00`` 会被当成未知选项，
-    这里统一改写为 ``--offset=-00:05:00``。
+    argparse only recognises negative numbers of the form ``-1`` / ``-1.5``, so
+    ``-00:05:00`` would be taken for an unknown option; both are rewritten here as
+    ``--offset=-00:05:00``.
     """
     result: list[str] = []
     index = 0
@@ -90,26 +99,26 @@ def _print_status(config: Config) -> int:
         "{clock}", format_hms(secs, config.display.show_days)
     )
 
-    print(f"现在        : {now:%Y-%m-%d %H:%M:%S}")
-    print(f"目标时间点 T: {target:%Y-%m-%d %H:%M:%S}")
-    print(f"偏移        : {offset:+.0f} 秒")
-    print(f"偏移时刻 M  : {mark:%Y-%m-%d %H:%M:%S}")
-    print(f"主标题      : {main_text}")
-    print(f"副标题      : {sub_text}")
+    print(f"now          : {now:%Y-%m-%d %H:%M:%S}")
+    print(f"target  T    : {target:%Y-%m-%d %H:%M:%S}")
+    print(f"offset       : {offset:+.0f} s")
+    print(f"offset  M    : {mark:%Y-%m-%d %H:%M:%S}")
+    print(f"main title   : {main_text}")
+    print(f"subtitle     : {sub_text}")
     info_text = render_info(
         config.display.info_template, target, mark, offset, config.display.show_days
     )
-    print(f"第三行      : {info_text or '（已关闭）'}")
+    print(f"third line   : {info_text or '(switched off)'}")
 
     notifier = MomentNotifier(config.notify)
-    notifier.arm([("偏移时刻", mark), ("目标时间点", target)], now)
+    notifier.arm([("Offset moment", mark), ("Target time", target)], now)
     upcoming = notifier.upcoming(now)
     if upcoming:
-        print("接下来提醒  :")
+        print("upcoming reminders:")
         for fire_at, title in upcoming:
             print(f"  {fire_at:%H:%M:%S}  {title}")
     else:
-        print("接下来提醒  : 无")
+        print("upcoming reminders: none")
     return 0
 
 
@@ -120,20 +129,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.init_config:
         if config_path.exists() and not args.force:
-            print(f"配置已存在：{config_path}（要覆盖请加 --force）", file=sys.stderr)
+            print(f"the config already exists: {config_path} (pass --force to overwrite it)", file=sys.stderr)
             return 1
         write_default_config(config_path)
-        print(f"已生成默认配置：{config_path}")
+        print(f"wrote {config_path}")
         return 0
 
     if not config_path.exists():
         write_default_config(config_path)
-        print(f"未找到配置，已生成默认配置：{config_path}")
+        print(f"no config found, wrote a default one to {config_path}")
 
     try:
         config = load_config(config_path)
-    except Exception as exc:  # noqa: BLE001 - TOML 语法错误等，直接提示用户
-        print(f"读取配置失败：{exc}", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 - TOML syntax errors and the like: just tell the user
+        print(f"could not read the config: {exc}", file=sys.stderr)
         return 1
 
     _apply_overrides(config, args)
@@ -141,19 +150,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.test_notify:
         from . import notify as notify_module
 
-        print(f"通知后端：{notify_module.backend()}")
+        print(f"notification backend: {notify_module.backend()}")
         ok = notify_module.send(
-            "[FloatClock] 测试通知",
-            "如果你看到这一条，通知通道就通了。",
+            "[T-00:00:00] FloatClock test",
+            "If you can see this, system notifications work",
             config.notify.sound_name if config.notify.sound else None,
         )
-        print("发送结果：", "成功" if ok else "失败（详见上面的 stderr）")
+        print("send result:", "ok" if ok else "failed (see the stderr above)")
         return 0 if ok else 1
 
     if args.print_only:
         return _print_status(config)
 
-    from .overlay import FloatingClock  # 延迟导入：--print / --init-config 不依赖 GUI
+    from .overlay import FloatingClock  # imported lazily: --print / --init-config need no GUI
 
     app = FloatingClock(config, open_settings=args.settings)
     if args.diagnose:

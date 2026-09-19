@@ -1,9 +1,26 @@
 [project]
 name = "float-clock"
 version = "1.0.0"
-description = "无背景悬浮 T± 倒计时浮窗：绿色粗体等宽字体、可拖动、右键锁定、临近时间点系统通知"
+description = "Borderless, transparent, always-on-top T± countdown overlay: bold green monospace text, draggable, right-click to lock, system notifications near each moment"
 readme = "README.md"
 requires-python = ">=3.11"
+keywords = ["clock", "countdown", "timer", "overlay", "tkinter", "desktop"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: MacOS X :: Aqua",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: X11 Applications",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Desktop Environment",
+    "Topic :: Office/Business :: Scheduling",
+]
 dependencies = [
     "pillow>=12.3.0",
 ]
@@ -18,10 +35,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/float_clock"]
 
-# 解释器由 .python-version 钉在 3.12.7：
-#   1) 必须是 uv 托管的解释器（Homebrew 的 python 不带 _tkinter）
-#   2) 必须是自带 Tk 8.6 的构建 —— Tk 9.0 在 macOS 上会把 systemTransparent
-#      画成不透明黑，浮窗会变成黑底 + 文字拖影
+# The interpreter is pinned to 3.12.7 by .python-version:
+#   1) it has to be a uv-managed interpreter (the Homebrew python ships no _tkinter)
+#   2) it has to be a build that bundles Tk 8.6 -- on macOS Tk 9.0 paints
+#      systemTransparent as opaque black, turning the overlay into a black box
+#      with smeared text
 [tool.uv]
 python-preference = "only-managed"
 

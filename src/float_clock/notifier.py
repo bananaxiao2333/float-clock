@@ -1,4 +1,4 @@
-"""临近时间点的系统通知调度（带去重与「重载不重发」保护）。"""
+"""Scheduling of system notifications near each moment (with de-duplication and a "reload does not resend" guard)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ __all__ = ["MomentNotifier", "render_copy"]
 
 
 def render_copy(template: str, values: dict[str, str]) -> str:
-    """按占位符渲染通知文案；认不出的占位符原样保留。"""
+    """Render notification copy from placeholders; unrecognised placeholders are left as-is."""
     text = template
     for key, value in values.items():
         text = text.replace("{" + key + "}", value)
@@ -22,7 +22,7 @@ _GRACE_SECONDS = 1.5
 
 
 class MomentNotifier:
-    """为若干「时间点」排好提醒队列，tick 时把到点的发出去。"""
+    """Queue reminders for a number of moments and fire the due ones on each tick."""
 
     def __init__(self, config: NotifyConfig) -> None:
         self.config = config
@@ -31,9 +31,9 @@ class MomentNotifier:
         self._fired: set[str] = set()
         self._armed_at: datetime | None = None
 
-    # ------------------------------------------------------------------ 构建
+    # ---------------------------------------------------------------- building
     def arm(self, moments: list[tuple[str, datetime]], now: datetime) -> None:
-        """（重新）布防。时间点没变化时保留已发送记录，避免重复弹窗。"""
+        """(Re-)arm. When the moments are unchanged the sent record is kept, so nothing pops up twice."""
         if moments == self._moments:
             self._armed_at = now
             return
@@ -65,7 +65,7 @@ class MomentNotifier:
                     )
                 )
             if self.config.at_moment:
-                values = base | {"sign": "-", "clock": format_hms(0), "human": "0 秒"}
+                values = base | {"sign": "-", "clock": format_hms(0), "human": "0s"}
                 events.append(
                     (
                         moment,
@@ -93,9 +93,9 @@ class MomentNotifier:
         events.sort(key=lambda item: item[0])
         self._events = events
 
-    # -------------------------------------------------------------------- 运行
+    # ------------------------------------------------------------------ running
     def tick(self, now: datetime) -> list[str]:
-        """发送到点且本次启动后到点的通知，返回本次发出的标题列表。"""
+        """Send notifications that are due and became due after this startup; returns the titles sent this tick."""
         if not self.config.enabled or self._armed_at is None:
             return []
         cutoff = self._armed_at - timedelta(seconds=_GRACE_SECONDS)
@@ -109,9 +109,9 @@ class MomentNotifier:
                 sent.append(title)
         return sent
 
-    # ------------------------------------------------------------------ 辅助
+    # ------------------------------------------------------------------ helpers
     def upcoming(self, now: datetime, limit: int = 6) -> list[tuple[datetime, str]]:
-        """还没发的最近若干条提醒，供 --print 预览。"""
+        """The nearest reminders that have not been sent yet, for the --print preview."""
         result = [
             (fire_at, title)
             for fire_at, key, title, _ in self._events
