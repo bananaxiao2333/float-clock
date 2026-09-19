@@ -92,6 +92,12 @@ pub struct WindowConfig {
     pub opacity: f64,
     /// Show a tray / menu-bar icon. Ignored on platforms without a tray backend.
     pub tray: bool,
+    /// Windows only: ask for administrator rights at startup so the overlay can
+    /// be placed in the top window band (see `crate::windows`).
+    ///
+    /// Off means the overlay sits below anything in a higher band - Task
+    /// Manager with "Always on top" ticked, for instance. Ignored elsewhere.
+    pub ui_access: bool,
 }
 
 impl Default for WindowConfig {
@@ -104,6 +110,7 @@ impl Default for WindowConfig {
             locked: false,
             opacity: default_opacity(),
             tray: default_true(),
+            ui_access: default_true(),
         }
     }
 }
@@ -463,6 +470,15 @@ opacity = 1.0
 # show-hide, lock, settings, opening this file, reloading and quitting.
 # Linux has no tray backend in this build; the setting is ignored there.
 tray = true
+# Windows only. From Windows 8 on, windows sit in bands and an ordinary process
+# cannot rise above ZBID_DESKTOP, so anything in a higher band - Task Manager
+# with "Always on top" ticked, the on-screen keyboard - covers the overlay no
+# matter what. Reaching the top band needs UIAccess, which needs administrator
+# rights, so this asks for them at startup: one UAC prompt per launch.
+#
+# Say no to the prompt and the overlay still runs, just below those windows.
+# Set this to false to stop being asked.
+ui_access = true
 
 [display]
 # Monospace font family. Leave empty to auto-pick the system monospace font
@@ -632,6 +648,7 @@ mod tests {
         assert_eq!(config.interval_ms(), 200);
         assert!(config.notify.before.contains(&120));
         assert!(config.window.tray);
+        assert!(config.window.ui_access);
     }
 
     #[test]

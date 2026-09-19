@@ -51,6 +51,7 @@ Platform notes:
 * **macOS** - the app is ad-hoc signed but not notarized. On first launch, right-click the app and choose **Open** once, or clear the quarantine flag: `xattr -dr com.apple.quarantine FloatClock.app`.
 * **Linux** - needs glibc 2.28 or newer (Ubuntu 20.04, Debian 10 and later). It links only `libc`, `libm`, `libpthread` and `libdl`; X11 and GL are `dlopen`'d at runtime. `unzip` (or your file manager) restores the executable bit.
 * **Windows** - the icon and the version block are embedded in the exe. SmartScreen may warn about an unknown publisher: **More info** → **Run anyway**.
+  Windows will also ask for administrator rights, because reaching the top window band needs them - see [Above everything, on Windows](#above-everything-on-windows). Say no and it still runs, just below those windows.
 
 The same release carries `SHA256SUMS`:
 
@@ -131,6 +132,26 @@ macOS gets a menu-bar icon (an `NSStatusItem`) and Windows gets a notification-a
 
 ---
 
+## Above everything, on Windows
+
+**Always on top** is not the whole story on Windows. Since Windows 8, windows live in *bands*, and `SetWindowPos(HWND_TOPMOST)` cannot lift a window out of `ZBID_DESKTOP` - the band an ordinary process's windows are created in. Anything sitting higher therefore covers the overlay no matter what:
+
+- Task Manager with **Always on top** ticked sits in `ZBID_SYSTEM_TOOLS`
+- the on-screen keyboard, and the lock screen, sit higher still
+
+The only band above those that an application can reach is `ZBID_UIACCESS`, and the only way in is for the process itself to hold **UIAccess**.
+
+UIAccess normally requires an Authenticode signature and installation under `%ProgramFiles%`. Putting `uiAccess="true"` in the manifest of an unsigned binary does not degrade gracefully - the process simply refuses to start - so FloatClock does not do that. It uses the other documented route instead: with administrator rights it takes a copy of a SYSTEM process's token, sets `TokenUIAccess` on the copy, and starts a second instance with it. That instance holds UIAccess from the moment it starts, which is when the band gets decided. The original process exits; you end up with one overlay.
+
+The practical consequences, which are worth knowing before you turn it on:
+
+- **One UAC prompt per launch.** The privilege is the price of the band; there is no way around it.
+- **Declining costs the top band and nothing else.** The overlay runs normally, just below Task Manager and friends.
+- **`ui_access = false`** in the config stops the asking entirely. There is no command-line flag for it; the config is the switch.
+- Anything that only prints and exits (`--print`, `--render-png`, `--diagnose`, `--test-notify`, `--init-config`) never asks for elevation, so scripting and CI are unaffected.
+
+The whole path is best-effort. Every failure - no SeDebugPrivilege, no `winlogon.exe` in the session, a compositor that says no - logs why and carries on with a normal overlay.
+
 ## What T± means
 
 There are two moments in the program:
@@ -179,6 +200,7 @@ topmost = true         # keep the overlay above every other window
 locked = false         # while locked the overlay cannot be dragged
 opacity = 1.0          # whole-window opacity; usually stays at 1.0
 tray = true            # tray icon on macOS / Windows (ignored on Linux)
+ui_access = true       # Windows: ask for admin rights so the overlay can use the top window band
 
 [display]
 font_family = ""       # empty = auto-pick the system monospace font

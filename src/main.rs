@@ -141,6 +141,22 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
 
+    // Windows: climb towards the top window band before anything else happens.
+    // Doing it here rather than later matters, because the re-launched instance
+    // has to be the one that decides this is a first run - otherwise the
+    // settings window would never be shown.
+    // Nothing that only prints and exits has any business asking for
+    // administrator rights - the CI smoke tests run exactly these.
+    let headless = args.print || args.render_png.is_some() || args.diagnose || args.test_notify;
+    if !headless {
+        let wanted = config::load_config(&config_path)
+            .map(|config| config.window.ui_access)
+            .unwrap_or(true);
+        if float_clock::windows::bootstrap(wanted) == float_clock::windows::Outcome::HandedOver {
+            return Ok(());
+        }
+    }
+
     // The very first run - a double-click, most likely - has no config file yet.
     // Write one immediately, otherwise there is nowhere to store the window
     // position the moment the user drags it.
@@ -273,6 +289,9 @@ fn parse_args() -> Result<Args, String> {
             "--no-transparent" => args.no_transparent = true,
             "--probe-png" => args.probe_png = Some(PathBuf::from(take("--probe-png")?)),
             "--probe" => args.probe = Some(positive_number("--probe", &take("--probe")?)?),
+            // Set by the Windows bootstrap when it re-launches itself; see
+            // `float_clock::windows`.
+            other if float_clock::windows::is_internal_flag(other) => {}
             other => return Err(format!("unrecognised argument: {other} (try --help)")),
         }
     }

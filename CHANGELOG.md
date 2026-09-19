@@ -5,6 +5,37 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-20
+
+Windows can now put the overlay above Task Manager, the on-screen keyboard and
+the lock screen.
+
+### Added
+
+- **UIAccess on Windows**, so the overlay can occupy the top window band. From
+  Windows 8 on, windows live in bands and `SetWindowPos(HWND_TOPMOST)` cannot
+  lift one out of `ZBID_DESKTOP`, which is where an ordinary process's windows
+  are created - so anything in a higher band covered the overlay no matter what.
+  Reaching `ZBID_UIACCESS` needs the process itself to hold UIAccess, which
+  normally requires an Authenticode signature and installation under
+  `%ProgramFiles%`; the manifest route is not available to an unsigned portable
+  binary, and `uiAccess="true"` on one makes it refuse to start at all. Instead
+  FloatClock takes a copy of a SYSTEM process's token, sets `TokenUIAccess` and
+  starts a second instance with it, then exits.
+
+  This needs administrator rights, so Windows asks once per launch. Declining is
+  fine: the overlay runs normally, just below higher-band windows. The prompt is
+  skipped entirely for anything that only prints and exits, so `--print`,
+  `--render-png`, `--diagnose`, `--test-notify` and `--init-config` are
+  unaffected, and so is CI.
+
+  `[window] ui_access = false` turns the whole thing off.
+
+### Changed
+
+- `config.example.toml` gained the `ui_access` key. A test pins it to the
+  template that `--init-config` writes, so the two cannot drift apart again.
+
 ## [0.3.1] - 2026-09-20
 
 Hiding the overlay used to be a one-way door. That, and a few smaller pieces of
@@ -91,6 +122,7 @@ The Rust rewrite: the first usable version.
 - Config hot reload with comment-preserving write-back
 - 59 unit tests
 
+[0.4.0]: https://github.com/bananaxiao2333/float-clock/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/bananaxiao2333/float-clock/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/bananaxiao2333/float-clock/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/bananaxiao2333/float-clock/compare/v0.2.0...v0.2.1

@@ -16,3 +16,4 @@ pub mod shell;
 pub mod text;
 pub mod timefmt;
 pub mod tray;
+pub mod windows;

@@ -1,6 +1,6 @@
 [package]
 name = "float-clock"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.80"
 description = "Borderless, transparent, always-on-top T+/- countdown overlay for the desktop"
@@ -33,6 +33,19 @@ glow = "0.17"
 # and `libxdo` is not needed either.
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 tray-icon = { version = "0.25", default-features = false }
+
+# Windows: the UIAccess bootstrap needs raw Win32 - token duplication,
+# SetTokenInformation(TokenUIAccess) and CreateProcessAsUserW.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_RemoteDesktop",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 # macOS only: pixel health check of the real NSWindow (--probe).
 # Not compiled at all on any other platform.
