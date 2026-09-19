@@ -1,40 +1,62 @@
-# 更新日志
+# Changelog
 
-## v0.2.1 — 2026-09-19
+All notable changes to this project are documented in this file.
 
-修掉「下载下来双击打不开」这件事，并把图标补上。
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### 修复
+## [0.3.0] - unreleased
 
-- **macOS 下载后双击打不开**。原来 Release 里只有裸二进制，浏览器下载会抹掉可执行位，
-  Finder 于是把它当文本文件丢给「文本编辑」，弹出
-  「无法打开文件，文字编码 Unicode (UTF-8) 不适用」。
-  现在多给一个 `float-clock-macos-universal.zip`，里面是带图标的 `FloatClock.app`，
-  解压双击即可（裸二进制仍然保留，给脚本用，README 里写了 `chmod +x`）。
-- **双击打开时配置没地方存**。`.app` 的工作目录是 `/`，相对路径的 `config.toml` 既找不到
-  也写不进去。现在按 `--config` → `FLOAT_CLOCK_CONFIG` → 当前目录 → 用户配置目录
-  （macOS `~/Library/Application Support/FloatClock/`、Windows `%APPDATA%\FloatClock\`、
-  Linux `~/.config/float-clock/`）的顺序找，找不到就自动生成一份。
-- **Linux 下载后同样丢可执行位**。多给一个 `float-clock-linux-x86_64.tar.gz`。
+A tray icon, a settings window you get shown on the first run, a stable drag, and one archive format for every platform.
 
-### 新增
+### Added
 
-- **图标**：近黑圆角方块 + 亮绿倒计时表盘 + 等宽 `T−`，配色和浮窗本身一致。
-  由 `tools/make_icons.py` 生成（PNG / ICO / ICNS 都进仓库）。
-- macOS 打包成 `.app`（`tools/make_app.sh`），带 `Info.plist`、图标，并做 ad-hoc 签名。
-- Windows 的 exe 里写进图标和版本信息（`build.rs` + `winresource`）。
-- CI 的冒烟测试补上 Linux / Windows 上真跑 `--print` 和 `--render-png`。
-- `--print` 打印「接下来的提醒」时按时间点分组，每个时刻各显示最靠前的几条，
-  不会被其中一个时刻占满。
+- **Tray icon on macOS and Windows.** macOS shows an `NSStatusItem` in the menu bar, Windows a `Shell_NotifyIcon` entry in the notification area. Both open the same menu: Hide overlay / Show overlay, a Locked checkbox, Settings…, Open config file, Show config in folder, Reload config, Quit FloatClock. There is no tray backend on Linux in this build: the only options are XEmbed (X11-only and dead on Wayland) or a D-Bus `StatusNotifierItem`, and both would pull a GTK3 or D-Bus runtime into a binary that currently links nothing but libc. `[window] tray = false` turns the icon off.
+- **The first run writes a config file and opens the settings window**, so the config path is discoverable without reading any documentation.
+- **The settings window is a real editor now**, not just a viewer. It edits the target time, the offset, the colour, the title size, the subtitle size, the font family and the opacity, plus Locked / Always on top / notifications checkboxes, and it has buttons to open the config file, show it in the folder and reload it from disk. It also displays the exact config path. `--settings` opens it on startup.
+- **`float-clock --config-path`** prints the config file that would be used and exits.
+- Every release archive now contains `QUICKSTART.txt` (a plain-text getting-started guide) and `config.example.toml` (a fully commented example config) next to the program.
 
-## v0.2.0 — 2026-09-19
+### Changed
 
-Rust 重写，第一个能用的版本。
+- **Every platform now ships one `.zip` and nothing else.** The release assets are `float-clock-macos-universal.zip`, `float-clock-linux-x86_64.zip`, `float-clock-windows-x86_64.zip` and `SHA256SUMS`; the bare binaries are no longer published at all. A browser download strips the executable bit, and Finder then treats a bare Mach-O binary as a text file and hands it to TextEdit, which reports "the text encoding Unicode (UTF-8) is not applicable". A zip records the file mode, so unpacking restores it, and one archive format for every platform removes the "which file do I download?" question.
+- **Drag no longer jitters.** Dragging is handed to the window manager through `ViewportCommand::StartDrag`, so our code never sees the movement and there is no feedback loop. If the window manager does not take the drag over, the app detects within about 120 ms that the pointer is moving while the window is not and falls back to moving the window itself from an absolute anchor in monitor space.
+- The third-line separator changed from `·` to `|`, so the default `info_template` is now `"{time} | {delta}"`.
+- Notification bodies read `{human} until {label}`, `{label} reached at {time}` and `{label} passed {human} ago`, and durations render compactly as `45s`, `2m`, `1h 30m`, `1d 1h 1m`.
+- `--diagnose` also reports the tray status, including the reason when there is no tray backend.
+- The whole project is English only now: documentation, source comments, user-facing strings, notifications, config comments and workflow names. CI no longer installs a CJK font, because nothing in the repository is written in Chinese any more.
+- Unit tests: 61 → **69 passed**.
 
-- 一个代码库交叉编译出 macOS / Linux / Windows 单文件可执行程序
-- 三行结构：主标题 = 距偏移时刻剩余，副标题 = 距目标时间点已过，第三行 = 绿底镂空
-- T± 语义、补零等宽、超过一天 `DD:HH:MM:SS`
-- 左键拖动 / 右键锁定 / 双击设置，锁定状态用实线·虚线外框区分
-- 临近两个时间点的系统通知：阈值、去重、不补发启动前的提醒
-- 配置热重载 + 注释保留回写
-- 59 个单元测试
+## [0.2.1] - 2026-09-19
+
+Fixed "downloaded it, double-clicked it, nothing happens", and added the icon.
+
+### Fixed
+
+- **On macOS the download would not open by double-clicking.** The release only had a bare binary, a browser download stripped the executable bit, and Finder then handed it to TextEdit as a text file, which reported "the text encoding Unicode (UTF-8) is not applicable". Releases now also carry `float-clock-macos-universal.zip`, containing `FloatClock.app` with its icon; unpack and double-click. The bare binary is still published for scripts, and the README documents the `chmod +x` it needs.
+- **A double-clicked launch had nowhere to store its config.** The `.app` runs with `/` as its working directory, so a relative `config.toml` could neither be found nor written. The config file is now looked up in the order `--config` → `FLOAT_CLOCK_CONFIG` → the current directory → the per-user location (macOS `~/Library/Application Support/FloatClock/`, Windows `%APPDATA%\FloatClock\`, Linux `~/.config/float-clock/`), and a default one is written when none exists.
+- **The Linux download lost its executable bit in the same way.** Releases now also carry `float-clock-linux-x86_64.tar.gz`.
+
+### Added
+
+- **The icon**: a near-black rounded square with a bright green countdown dial and a monospace `T−`, in the same palette as the overlay itself. Generated by `tools/make_icons.py`, with the PNG / ICO / ICNS output committed.
+- macOS is packaged into a `.app` (`tools/make_app.sh`) with an `Info.plist`, the icon, and an ad-hoc signature.
+- The Windows exe carries the icon and a version block (`build.rs` + `winresource`).
+- CI smoke tests now genuinely run `--print` and `--render-png` on Linux and Windows.
+- `--print` groups the upcoming reminders by moment and shows the nearest few of each, instead of letting one moment fill the whole list.
+
+## [0.2.0] - 2026-09-19
+
+The Rust rewrite: the first usable version.
+
+- One codebase cross-compiles to single-file executables for macOS / Linux / Windows
+- Three lines: the main title counts down to the offset moment, the subtitle counts since the target time, and the third line is drawn as a green bar with knocked-out glyphs
+- T± semantics, zero-padded equal-width digits, `DD:HH:MM:SS` past a day
+- Left-button drag / right-click lock / double-click settings, with the locked state shown as a solid-versus-dashed frame
+- System notifications around both moments: thresholds, de-duplication, and no re-announcing of reminders that passed before startup
+- Config hot reload with comment-preserving write-back
+- 59 unit tests
+
+[0.3.0]: https://github.com/bananaxiao2333/float-clock/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/bananaxiao2333/float-clock/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/bananaxiao2333/float-clock/releases/tag/v0.2.0

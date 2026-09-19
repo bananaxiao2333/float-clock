@@ -1,7 +1,9 @@
-//! 字体查找、排版与栅格化。
+//! Font lookup, layout and rasterization.
 //!
-//! 自己栅格化（而不是交给 UI 框架）是为了让三个平台的观感完全一致，
-//! 也为了能实现「绿块 + 镂空字」——把已经画上去的像素重新抠成透明。
+//! Rasterizing here rather than delegating to a UI framework keeps the three
+//! platforms looking exactly the same, and it is also what makes the "green
+//! block + knocked-out glyphs" look possible: pixels that were already painted
+//! are punched back to transparent.
 
 use std::path::Path;
 
@@ -9,7 +11,7 @@ use ab_glyph::{Font, FontVec, Glyph, GlyphId, PxScale, ScaleFont};
 
 use crate::pixmap::{Color, Pixmap};
 
-/// 各平台的等宽字体候选（顺序即优先级）。
+/// Monospace font candidates per platform (the order is the priority).
 pub const MONO_CANDIDATES: &[&str] = &[
     "Menlo",
     "SF Mono",
@@ -25,7 +27,8 @@ pub const MONO_CANDIDATES: &[&str] = &[
     "Courier New",
 ];
 
-/// 等宽字体没有的字（中文、`·` 之类）交给这些字体兜底。
+/// Characters the monospace font lacks (CJK, the middle dot used in the info
+/// template, and the like) fall back to these fonts.
 pub const FALLBACK_CANDIDATES: &[&str] = &[
     "PingFang SC",
     "Hiragino Sans GB",
@@ -42,7 +45,8 @@ pub const FALLBACK_CANDIDATES: &[&str] = &[
     "Segoe UI",
 ];
 
-/// 画文字时的两种「墨」：正常上色，或者把像素抠掉。
+/// The two kinds of "ink" used when drawing text: paint normally, or erase the
+/// pixels away.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Ink {
     Paint(Color),
@@ -66,7 +70,8 @@ impl std::fmt::Debug for Fonts {
 }
 
 impl Fonts {
-    /// 按配置的字体族挑字体；留空则自动找系统等宽字体。
+    /// Picks a font by the configured family; when left empty, a system
+    /// monospace font is found automatically.
     pub fn load(family: &str) -> Result<Self, String> {
         let mut db = fontdb::Database::new();
         db.load_system_fonts();
@@ -75,7 +80,11 @@ impl Fonts {
         let (id, name) = if !requested.is_empty() {
             match query_family(&db, requested) {
                 Some(id) => (id, requested.to_string()),
-                None => return Err(format!("找不到字体 {requested:?}，请检查 font_family 拼写")),
+                None => {
+                    return Err(format!(
+                        "font {requested:?} not found, please check the spelling of font_family"
+                    ))
+                }
             }
         } else {
             let mut found = None;
@@ -93,12 +102,17 @@ impl Fonts {
                 .map(|id| (id, "monospace".to_string()))
             }) {
                 Some(pair) => pair,
-                None => return Err("系统里找不到任何等宽字体，请在 font_family 里指定一个".into()),
+                None => {
+                    return Err(
+                        "no monospace font could be found on the system, please name one in font_family"
+                            .into(),
+                    )
+                }
             }
         };
 
-        let primary =
-            load_face(&db, id).ok_or_else(|| format!("字体 {name:?} 无法解析为可用字形数据"))?;
+        let primary = load_face(&db, id)
+            .ok_or_else(|| format!("font {name:?} could not be parsed into usable glyph data"))?;
 
         let mut fallback = None;
         let mut fallback_name = None;
@@ -120,12 +134,12 @@ impl Fonts {
         })
     }
 
-    /// 直接从字体文件加载（测试与 `--font-file` 用）。
+    /// Loads straight from a font file (used by tests and by `--font-file`).
     pub fn from_file(path: &Path) -> Result<Self, String> {
-        let data = std::fs::read(path).map_err(|e| format!("读取字体失败：{e}"))?;
+        let data = std::fs::read(path).map_err(|e| format!("failed to read the font: {e}"))?;
         let index = 0u32;
         let primary = FontVec::try_from_vec_and_index(data, index)
-            .map_err(|e| format!("解析字体失败：{e}"))?;
+            .map_err(|e| format!("failed to parse the font: {e}"))?;
         Ok(Self {
             primary,
             primary_name: path
@@ -137,7 +151,7 @@ impl Fonts {
         })
     }
 
-    /// 一行的高度（ascent - descent）。
+    /// The height of one line (ascent - descent).
     pub fn line_height(&self, px: f32) -> f32 {
         let scaled = self.primary.as_scaled(PxScale::from(px));
         scaled.height()
@@ -147,7 +161,7 @@ impl Fonts {
         self.primary.as_scaled(PxScale::from(px)).ascent()
     }
 
-    /// 找出能画这个字符的字体槽位。
+    /// Finds the font slot that can draw this character.
     fn slot_for(&self, ch: char) -> Option<bool> {
         if self.primary.glyph_id(ch).0 != 0 {
             return Some(false);
@@ -158,7 +172,8 @@ impl Fonts {
         }
     }
 
-    /// 简单逐字排版。等宽字体下每个字符推进量相同，够用了。
+    /// Simple character-by-character layout. With a monospace font every
+    /// character advances by the same amount, which is good enough here.
     pub fn run(&self, text: &str, px: f32) -> GlyphRun {
         let scale = PxScale::from(px);
         let primary = self.primary.as_scaled(scale);
@@ -167,14 +182,15 @@ impl Fonts {
         let mut glyphs = Vec::with_capacity(text.chars().count());
         for ch in text.chars() {
             let Some(use_fallback) = self.slot_for(ch) else {
-                // 两个字体都没有这个字：跳过，免得画出 .notdef 方块
+                // Neither font has this character: skip it, so that no .notdef
+                // box gets drawn
                 if ch == ' ' {
                     pen_x += primary.h_advance(primary.glyph_id(' '));
                 }
                 continue;
             };
             if use_fallback {
-                let scaled = fallback.as_ref().expect("fallback 已确认存在");
+                let scaled = fallback.as_ref().expect("the fallback is known to exist");
                 let id = scaled.glyph_id(ch);
                 glyphs.push(Placed {
                     fallback: true,
@@ -198,7 +214,8 @@ impl Fonts {
         }
     }
 
-    /// 把一行字画到画布上。`baseline` 是基线在画布里的 y。
+    /// Draws one line of text onto the canvas. `baseline` is the canvas y of the
+    /// baseline.
     pub fn draw(
         &self,
         pixmap: &mut Pixmap,
@@ -241,7 +258,8 @@ impl Fonts {
         }
     }
 
-    /// 一行文字的紧致墨迹范围（左上角相对基线原点的偏移 + 尺寸）。
+    /// The tight ink bounds of one line of text (offset of the top-left corner
+    /// relative to the baseline origin, plus its size).
     pub fn ink_bounds(&self, run: &GlyphRun, px: f32) -> Option<(f32, f32, f32, f32)> {
         let scale = PxScale::from(px);
         let primary = self.primary.as_scaled(scale);
@@ -301,7 +319,7 @@ fn load_face(db: &fontdb::Database, id: fontdb::ID) -> Option<FontVec> {
     .flatten()
 }
 
-/// 已排版好的一个字形。
+/// One glyph that has already been laid out.
 #[derive(Debug, Clone, Copy)]
 pub struct Placed {
     pub fallback: bool,
@@ -309,7 +327,7 @@ pub struct Placed {
     pub pen_x: f32,
 }
 
-/// 一行的排版结果。
+/// The layout result for one line.
 #[derive(Debug, Clone, Default)]
 pub struct GlyphRun {
     pub glyphs: Vec<Placed>,
@@ -321,7 +339,7 @@ mod tests {
     use super::*;
 
     fn fonts() -> Fonts {
-        Fonts::load("").expect("系统里应该有等宽字体")
+        Fonts::load("").expect("the system should have a monospace font")
     }
 
     #[test]
@@ -343,7 +361,7 @@ mod tests {
         for advance in &advances {
             assert!(
                 (advance - first).abs() < 0.01,
-                "等宽字体每位数推进量应该一致：{advance} vs {first}"
+                "every digit of a monospace font should advance by the same amount: {advance} vs {first}"
             );
         }
         assert!((run.width - first * 10.0).abs() < 0.5);
@@ -376,13 +394,19 @@ mod tests {
             .chunks_exact(4)
             .filter(|pixel| pixel[3] > 0)
             .count();
-        assert!(painted > 50, "应该画出实心数字，实际 {painted} 像素");
+        assert!(
+            painted > 50,
+            "a solid digit should be drawn, got {painted} pixels"
+        );
         let opaque = pixmap
             .data
             .chunks_exact(4)
             .filter(|pixel| pixel[3] > 200)
             .count();
-        assert!(opaque > 20, "应该有实心部分，实际 {opaque} 像素");
+        assert!(
+            opaque > 20,
+            "there should be a solid part, got {opaque} pixels"
+        );
     }
 
     #[test]
@@ -398,12 +422,15 @@ mod tests {
             .chunks_exact(4)
             .filter(|pixel| pixel[3] == 0)
             .count();
-        assert!(holes > 20, "镂空应该抠出洞，实际 {holes} 像素");
-        assert!(pixmap.get(0, 0)[3] > 0, "角落应该还保留绿色");
+        assert!(
+            holes > 20,
+            "the knockout should punch holes, got {holes} pixels"
+        );
+        assert!(pixmap.get(0, 0)[3] > 0, "the corner should still be green");
     }
 
     #[test]
     fn unknown_family_is_an_error() {
-        assert!(Fonts::load("绝对不存在的字体名").is_err());
+        assert!(Fonts::load("a-font-name-that-does-not-exist").is_err());
     }
 }

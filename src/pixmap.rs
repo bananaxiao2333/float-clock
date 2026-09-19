@@ -1,9 +1,11 @@
-//! 极简 RGBA 画布：直通（非预乘）alpha，足够的混合与擦除操作。
+//! A minimal RGBA canvas: straight (non-premultiplied) alpha, with just enough
+//! blending and erasing operations.
 //!
-//! 悬浮窗需要「绿块 + 镂空字」，也就是要能把已经画上去的像素重新抠成透明，
-//! 所以这里除了覆盖混合还提供 `erase`。
+//! The overlay window needs a "green block + knocked-out glyphs" look, which
+//! means pixels that were already painted have to be punched back to
+//! transparent, so besides source-over blending this also offers `erase`.
 
-/// 颜色。`a` 用 0.0~1.0 的浮点，方便做抗锯齿覆盖度运算。
+/// A color. `a` is a 0.0~1.0 float, which makes antialiasing coverage math easy.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Color {
     pub r: u8,
@@ -24,14 +26,14 @@ impl Color {
         Self { r, g, b, a: 1.0 }
     }
 
-    /// 解析 `#RRGGBB` / `#RGB` / `RRGGBB`；带 alpha 的 `#RRGGBBAA` 也认。
+    /// Parses `#RRGGBB` / `#RGB` / `RRGGBB`; `#RRGGBBAA` with alpha is also accepted.
     pub fn parse(text: &str) -> Result<Self, String> {
         let hex = text.trim().trim_start_matches('#');
         let digits: Vec<u8> = hex
             .chars()
             .map(|c| c.to_digit(16).map(|v| v as u8))
             .collect::<Option<Vec<u8>>>()
-            .ok_or_else(|| format!("颜色只能由 16 进制字符组成：{text:?}"))?;
+            .ok_or_else(|| format!("a color may only consist of hex digits: {text:?}"))?;
         match digits.len() {
             3 => Ok(Color::rgb(digits[0] * 17, digits[1] * 17, digits[2] * 17)),
             6 => Ok(Color::rgb(
@@ -45,7 +47,7 @@ impl Color {
                 b: digits[4] * 16 + digits[5],
                 a: (digits[6] * 16 + digits[7]) as f32 / 255.0,
             }),
-            _ => Err(format!("颜色需要 3、6 或 8 位 16 进制：{text:?}")),
+            _ => Err(format!("a color needs 3, 6 or 8 hex digits: {text:?}")),
         }
     }
 
@@ -66,12 +68,12 @@ impl Color {
     }
 }
 
-/// 一块 RGBA 像素，行优先。
+/// A block of RGBA pixels, row-major.
 #[derive(Debug, Clone)]
 pub struct Pixmap {
     pub width: u32,
     pub height: u32,
-    /// 长度 = width * height * 4，顺序 R G B A
+    /// Length = width * height * 4, in R G B A order
     pub data: Vec<u8>,
 }
 
@@ -112,7 +114,7 @@ impl Pixmap {
         ]
     }
 
-    /// 把一个带覆盖度的前景色覆盖混合到 (x, y)。
+    /// Source-over blends a foreground color carrying a coverage value into (x, y).
     pub fn blend(&mut self, x: i64, y: i64, color: Color, coverage: f32) {
         if coverage <= 0.0 || x < 0 || y < 0 {
             return;
@@ -144,7 +146,8 @@ impl Pixmap {
         self.data[index + 3] = (out_a.clamp(0.0, 1.0) * 255.0).round() as u8;
     }
 
-    /// 按覆盖度擦除：覆盖度 1 的像素直接变成全透明（镂空字的做法）。
+    /// Erases by coverage: a pixel at coverage 1 becomes fully transparent (how
+    /// knocked-out glyphs are done).
     pub fn erase(&mut self, x: i64, y: i64, coverage: f32) {
         if coverage <= 0.0 || x < 0 || y < 0 {
             return;
@@ -167,8 +170,10 @@ impl Pixmap {
         }
     }
 
-    /// 描一个矩形边框；`dash` 为 `Some((实线长, 空白长))` 时画虚线。
-    // 参数多，但每一个都是独立的几何量，包成结构体反而更难读
+    /// Strokes a rectangular border; `dash` of `Some((solid length, gap length))`
+    /// draws it dashed.
+    // Many parameters, but each one is an independent geometric quantity, and
+    // wrapping them in a struct would only make this harder to read
     #[allow(clippy::too_many_arguments)]
     pub fn border_rect(
         &mut self,
@@ -205,7 +210,7 @@ impl Pixmap {
         }
     }
 
-    /// 编码成 PNG（`--render-png` 自检用）。
+    /// Encodes to PNG (used by the `--render-png` self-check).
     pub fn to_png(&self) -> Result<Vec<u8>, String> {
         let mut out = Vec::new();
         {
@@ -214,10 +219,10 @@ impl Pixmap {
             encoder.set_depth(png::BitDepth::Eight);
             let mut writer = encoder
                 .write_header()
-                .map_err(|e| format!("PNG 头写入失败：{e}"))?;
+                .map_err(|e| format!("failed to write the PNG header: {e}"))?;
             writer
                 .write_image_data(&self.data)
-                .map_err(|e| format!("PNG 数据写入失败：{e}"))?;
+                .map_err(|e| format!("failed to write the PNG data: {e}"))?;
         }
         Ok(out)
     }
@@ -259,7 +264,7 @@ mod tests {
         assert_eq!((r, g, b), (0, 255, 102));
         assert!(
             (a as i32 - 128).abs() <= 2,
-            "alpha 应该约等于 128，实际 {a}"
+            "alpha should be about 128, got {a}"
         );
     }
 
@@ -269,7 +274,11 @@ mod tests {
         pixmap.fill(Color::rgb(0, 255, 102));
         pixmap.erase(0, 0, 1.0);
         pixmap.erase(1, 0, 0.5);
-        assert_eq!(pixmap.get(0, 0)[3], 0, "覆盖度 1 应该完全镂空");
+        assert_eq!(
+            pixmap.get(0, 0)[3],
+            0,
+            "coverage 1 should punch all the way through"
+        );
         assert!((pixmap.get(1, 0)[3] as i32 - 128).abs() <= 2);
         assert_eq!(pixmap.get(2, 0)[3], 255);
     }
@@ -288,10 +297,18 @@ mod tests {
         let mut pixmap = Pixmap::new(10, 10);
         pixmap.border_rect(0, 0, 10, 10, 1, Color::rgb(255, 0, 0), None);
         for index in 0..10 {
-            assert_eq!(pixmap.get(index, 0)[3], 255, "顶边第 {index} 列不该有缺口");
-            assert_eq!(pixmap.get(0, index)[3], 255, "左边第 {index} 行不该有缺口");
+            assert_eq!(
+                pixmap.get(index, 0)[3],
+                255,
+                "top edge column {index} must be solid"
+            );
+            assert_eq!(
+                pixmap.get(0, index)[3],
+                255,
+                "left edge row {index} must be solid"
+            );
         }
-        assert_eq!(pixmap.get(5, 5)[3], 0, "中间应该是空的");
+        assert_eq!(pixmap.get(5, 5)[3], 0, "the middle should be empty");
     }
 
     #[test]
@@ -300,8 +317,11 @@ mod tests {
         pixmap.border_rect(0, 0, 40, 10, 1, Color::rgb(255, 0, 0), Some((4, 3)));
         let opaque = (0..40).filter(|x| pixmap.get(*x, 0)[3] == 255).count();
         let holes = (0..40).filter(|x| pixmap.get(*x, 0)[3] == 0).count();
-        assert!(opaque > 10, "虚线也要有足够的实线段：{opaque}");
-        assert!(holes > 10, "虚线必须有缺口：{holes}");
+        assert!(
+            opaque > 10,
+            "a dashed border needs enough solid segments: {opaque}"
+        );
+        assert!(holes > 10, "a dashed border must have gaps: {holes}");
     }
 
     #[test]

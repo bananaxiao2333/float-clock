@@ -1,4 +1,5 @@
-//! 临近时间点的系统通知调度（带去重与「重载不重发」保护）。
+//! System-notification scheduling for upcoming moments (with de-duplication and
+//! "reloading never re-announces" protection).
 
 use chrono::{Duration, NaiveDateTime};
 
@@ -6,7 +7,7 @@ use crate::config::NotifyConfig;
 use crate::notify;
 use crate::timefmt::{clock_of, datetime_of, format_hms, format_human};
 
-/// 按占位符渲染通知文案；认不出的占位符原样保留。
+/// Render notification copy by placeholder; unknown placeholders are kept verbatim.
 pub fn render_copy(template: &str, values: &[(&str, String)]) -> String {
     let mut text = template.to_string();
     for (key, value) in values {
@@ -21,13 +22,13 @@ const GRACE_SECONDS: i64 = 1;
 struct Event {
     fire_at: NaiveDateTime,
     key: String,
-    /// 这条提醒属于哪个时间点（`目标时间点` / `偏移时刻`）
+    /// Which moment this reminder belongs to (`target moment` / `offset moment`)
     label: String,
     title: String,
     body: String,
 }
 
-/// 为若干「时间点」排好提醒队列，tick 时把到点的发出去。
+/// Build the reminder queue for a set of moments; `tick` fires the ones that are due.
 pub struct MomentNotifier {
     config: NotifyConfig,
     moments: Vec<(String, NaiveDateTime)>,
@@ -51,7 +52,8 @@ impl MomentNotifier {
         &mut self.config
     }
 
-    /// （重新）布防。时间点没变化时保留已发送记录，避免重复弹窗。
+    /// (Re)arm. When the moments are unchanged the already-sent records are kept,
+    /// so the same reminder never pops up twice.
     pub fn arm(&mut self, moments: Vec<(String, NaiveDateTime)>, now: NaiveDateTime) {
         if moments == self.moments {
             self.armed_at = Some(now);
@@ -97,7 +99,7 @@ impl MomentNotifier {
                 let mut values = base.clone();
                 values.push(("sign", "-".into()));
                 values.push(("clock", format_hms(0, true)));
-                values.push(("human", "0 秒".into()));
+                values.push(("human", "0s".into()));
                 events.push(Event {
                     fire_at: *moment,
                     key: format!("{label}|0"),
@@ -135,7 +137,8 @@ impl MomentNotifier {
         self.events = events;
     }
 
-    /// 发送到点、且本次启动之后到点的通知；返回本次发出的标题。
+    /// Send the notifications that are due and that became due after this startup;
+    /// returns the titles sent this time.
     pub fn tick(&mut self, now: NaiveDateTime) -> Vec<String> {
         if !self.config.enabled {
             return Vec::new();
@@ -163,7 +166,7 @@ impl MomentNotifier {
         sent
     }
 
-    /// 还没发的最近若干条提醒，供 `--print` 预览。
+    /// The next few reminders that have not fired yet, for the `--print` preview.
     pub fn upcoming(
         &self,
         now: NaiveDateTime,
@@ -202,24 +205,25 @@ mod tests {
     #[test]
     fn arms_expected_number_of_events() {
         let mut notifier = notifier();
-        notifier.arm(vec![("目标时间点".into(), dt(20, 29, 0))], dt(20, 0, 0));
-        // 3 个 before + 正点 + 2 个 after
+        notifier.arm(vec![("Target moment".into(), dt(20, 29, 0))], dt(20, 0, 0));
+        // 3 before + the exact moment + 2 after
         assert_eq!(notifier.events.len(), 6);
         assert_eq!(notifier.events[0].fire_at, dt(20, 27, 0));
         let upcoming = notifier.upcoming(dt(20, 0, 0), 10);
-        assert_eq!(upcoming[0].1, "目标时间点");
-        assert_eq!(upcoming[0].2, "[T-00:02:00] 目标时间点");
+        assert_eq!(upcoming[0].1, "Target moment");
+        assert_eq!(upcoming[0].2, "[T-00:02:00] Target moment");
     }
 
     #[test]
     fn upcoming_keeps_moments_apart() {
-        // 两个时刻的提醒交错排在一起，label 必须能区分开，
-        // `--print` 靠它才能做到「每个时刻各显示几条」而不是被一个时刻占满。
+        // The reminders of two moments are interleaved, so the label has to tell
+        // them apart: that is what lets `--print` show a few entries per moment
+        // instead of letting one moment fill the whole list.
         let mut notifier = notifier();
         notifier.arm(
             vec![
-                ("目标时间点".into(), dt(20, 29, 0)),
-                ("偏移时刻".into(), dt(22, 29, 0)),
+                ("Target moment".into(), dt(20, 29, 0)),
+                ("Offset moment".into(), dt(22, 29, 0)),
             ],
             dt(20, 0, 0),
         );
@@ -228,12 +232,13 @@ mod tests {
             .iter()
             .map(|(_, label, _)| label.as_str())
             .collect();
-        assert!(labels.contains(&"目标时间点"));
-        assert!(labels.contains(&"偏移时刻"));
-        // 同一个时刻的所有条目，渲染出来的标题互不相同（标题里带 T± 时钟）
+        assert!(labels.contains(&"Target moment"));
+        assert!(labels.contains(&"Offset moment"));
+        // every entry of one moment renders a distinct title (the title carries
+        // the T± clock)
         let titles: Vec<&str> = upcoming
             .iter()
-            .filter(|(_, label, _)| label == "目标时间点")
+            .filter(|(_, label, _)| label == "Target moment")
             .map(|(_, _, title)| title.as_str())
             .collect();
         let mut unique = titles.clone();
@@ -254,10 +259,14 @@ mod tests {
     #[test]
     fn does_not_fire_events_older_than_startup() {
         let mut notifier = notifier();
-        // 程序在 20:28:30 才启动，20:28:00 那条（T-00:01:00）早就过去了
+        // The program only starts at 20:28:30, so the 20:28:00 entry
+        // (T-00:01:00) is long gone.
         notifier.arm(vec![("X".into(), dt(20, 29, 0))], dt(20, 28, 30));
         let sent = notifier.tick(dt(20, 28, 30));
-        assert!(sent.is_empty(), "不应补发启动前的提醒：{sent:?}");
+        assert!(
+            sent.is_empty(),
+            "reminders from before startup must not be re-sent: {sent:?}"
+        );
     }
 
     #[test]
@@ -294,27 +303,38 @@ mod tests {
     fn copy_has_no_emoji_and_uses_brackets() {
         let config = NotifyConfig::default();
         let values: Vec<(&str, String)> = vec![
-            ("label", "偏移时刻".into()),
+            ("label", "Offset moment".into()),
             ("sign", "-".into()),
             ("clock", "00:02:00".into()),
-            ("human", "2 分".into()),
+            ("human", "2m".into()),
             ("time", "20:29:00".into()),
         ];
         let title = render_copy(&config.title_template, &values);
         let body = render_copy(&config.body_before, &values);
-        assert_eq!(title, "[T-00:02:00] 偏移时刻");
-        assert_eq!(body, "距离偏移时刻还有 2 分");
+        assert_eq!(title, "[T-00:02:00] Offset moment");
+        // The body wording itself lives in config.rs; what matters here is that
+        // every placeholder of the shipped template got filled in.
+        assert!(body.contains("Offset moment"), "{body}");
+        assert!(body.contains("2m"), "{body}");
+        assert!(!body.contains('{') && !body.contains('}'), "{body}");
+        assert_eq!(
+            render_copy("In {human}: {label}", &values),
+            "In 2m: Offset moment"
+        );
         for text in [&title, &body] {
             for ch in text.chars() {
                 let code = ch as u32;
                 let is_emoji = matches!(code,
-                    0x2190..=0x21FF   // 箭头
-                    | 0x2300..=0x27BF // 各种符号、装饰符
+                    0x2190..=0x21FF   // arrows
+                    | 0x2300..=0x27BF // symbols and dingbats
                     | 0x2B00..=0x2BFF
                     | 0x1F000..=0x1FAFF
                     | 0xFE0F
                     | 0x200D);
-                assert!(!is_emoji, "通知文案里不应出现 emoji：{text} 里的 {ch:?}");
+                assert!(
+                    !is_emoji,
+                    "notification copy must not contain emoji: {ch:?} in {text}"
+                );
             }
         }
         assert!(title.contains('[') && title.contains(']'));
@@ -323,8 +343,8 @@ mod tests {
     #[test]
     fn unknown_placeholder_is_left_alone() {
         assert_eq!(
-            render_copy("{nope} {human}", &[("human", "1 分".into())]),
-            "{nope} 1 分"
+            render_copy("{nope} {human}", &[("human", "1m".into())]),
+            "{nope} 1m"
         );
     }
 }

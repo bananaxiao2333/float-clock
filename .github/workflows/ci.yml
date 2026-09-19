@@ -16,7 +16,7 @@ env:
 
 jobs:
   test:
-    name: 测试与检查
+    name: Test and lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,21 +27,23 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      # 渲染层需要系统字体，测试里会逐个字查询字形
-      - name: 安装字体
+      # The render layer needs system fonts: the tests look up glyphs one by one.
+      # No CJK font is installed any more, because nothing in this repository is
+      # written in Chinese.
+      - name: Install fonts
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            fonts-dejavu-core fonts-noto-cjk
+            fonts-dejavu-core
 
-      - name: 格式
+      - name: Formatting
         run: cargo fmt --all -- --check
 
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: 单元测试
+      - name: Unit tests
         run: cargo test --all-targets
 
-      - name: 构建（本机平台）
+      - name: Build (host platform)
         run: cargo build --release

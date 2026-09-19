@@ -1,4 +1,5 @@
-//! 配置：TOML 读取、默认值合并、保留注释的回写、默认配置生成。
+//! Configuration: TOML loading, default merging, comment-preserving write-back
+//! and generation of the default config file.
 
 use std::path::{Path, PathBuf};
 
@@ -7,17 +8,19 @@ use serde::Deserialize;
 
 pub const DEFAULT_CONFIG_NAME: &str = "config.toml";
 
-/// 找不到配置文件时，按用户目录放一份的目录名。
+/// Directory name used when we have to fall back to a per-user config location.
 const APP_DIR_NAME: &str = "FloatClock";
 
-/// 每用户配置目录（不依赖任何 crate，三平台各按自己的惯例来）：
+/// Per-user configuration directory, using each platform's own convention and
+/// without depending on any crate:
 ///
 /// * macOS   `~/Library/Application Support/FloatClock`
 /// * Windows `%APPDATA%\FloatClock`
-/// * Linux   `$XDG_CONFIG_HOME/float-clock`（默认 `~/.config/float-clock`）
+/// * Linux   `$XDG_CONFIG_HOME/float-clock` (defaults to `~/.config/float-clock`)
 ///
-/// 有它才能让「下载下来双击打开」这件事成立：.app 双击时工作目录是 `/`，
-/// 相对路径的 `./config.toml` 既找不到也写不进去。
+/// This is what makes "download it and double-click it" actually work: a
+/// double-clicked `.app` runs with `/` as its working directory, so a relative
+/// `./config.toml` can neither be found nor written.
 pub fn user_config_dir() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").map(PathBuf::from);
 
@@ -38,11 +41,13 @@ pub fn user_config_dir() -> Option<PathBuf> {
     home.map(|home| home.join(".config/float-clock"))
 }
 
-/// 没显式指定 `--config` 时，按这个顺序找配置文件：
+/// Where the config file is looked for when `--config` was not given:
 ///
-/// 1. 环境变量 `FLOAT_CLOCK_CONFIG`
-/// 2. 当前目录下的 `config.toml`（在终端里跑的时候最顺手，也和旧版行为一致）
-/// 3. 每用户配置目录里的 `config.toml`（双击打开走的是这条，目录不存在就创建）
+/// 1. the `FLOAT_CLOCK_CONFIG` environment variable
+/// 2. `config.toml` in the current directory (handiest when running from a
+///    terminal, and what earlier versions did)
+/// 3. `config.toml` in the per-user config directory (this is the path a
+///    double-click takes; the directory is created if it does not exist yet)
 pub fn resolve_config_path() -> PathBuf {
     if let Some(explicit) = std::env::var_os("FLOAT_CLOCK_CONFIG") {
         if !explicit.is_empty() {
@@ -77,14 +82,16 @@ fn default_opacity() -> f64 {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct WindowConfig {
-    /// 浮窗左上角坐标（拖动后自动写回）
+    /// Top-left corner of the overlay; written back here after every drag.
     pub x: i32,
     pub y: i32,
     pub borderless: bool,
     pub topmost: bool,
     pub locked: bool,
-    /// 整体不透明度 0.05 ~ 1.0
+    /// Whole-window opacity, 0.05 .. 1.0
     pub opacity: f64,
+    /// Show a tray / menu-bar icon. Ignored on platforms without a tray backend.
+    pub tray: bool,
 }
 
 impl Default for WindowConfig {
@@ -96,6 +103,7 @@ impl Default for WindowConfig {
             topmost: default_true(),
             locked: false,
             opacity: default_opacity(),
+            tray: default_true(),
         }
     }
 }
@@ -103,7 +111,7 @@ impl Default for WindowConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct DisplayConfig {
-    /// 等宽字体族名；留空自动挑系统等宽字体
+    /// Monospace font family; empty means "pick the system's monospace font"
     pub font_family: String,
     pub main_size: f32,
     pub sub_size: f32,
@@ -126,7 +134,8 @@ pub struct DisplayConfig {
     pub border_color: String,
     pub border_width: i32,
     pub solid_when_locked: bool,
-    /// 字体渲染倍率上限（Retina 上跟随显示器缩放，此项只是上限）
+    /// Upper bound on the text rasterisation scale. On Retina / HiDPI the
+    /// display's own scale is followed; this is only a ceiling.
     pub max_scale: f32,
 }
 
@@ -141,7 +150,7 @@ impl Default for DisplayConfig {
             bold: true,
             show_days: true,
             gap: 2,
-            info_template: "{time} · {delta}".into(),
+            info_template: "{time} | {delta}".into(),
             info_size: 14.0,
             info_color: String::new(),
             info_style: "auto".into(),
@@ -190,9 +199,9 @@ impl Default for NotifyConfig {
             sound: true,
             sound_name: "Glass".into(),
             title_template: "[T{sign}{clock}] {label}".into(),
-            body_before: "距离{label}还有 {human}".into(),
-            body_at: "{label}已到 · {time}".into(),
-            body_after: "{label}已过去 {human}".into(),
+            body_before: "{human} until {label}".into(),
+            body_at: "{label} reached at {time}".into(),
+            body_after: "{label} passed {human} ago".into(),
         }
     }
 }
@@ -209,7 +218,7 @@ pub struct Config {
 }
 
 impl Config {
-    /// 目标时间点的显示颜色（第三行留空时跟随主色）。
+    /// Colour of the third line (falls back to the main colour when empty).
     pub fn info_color(&self) -> &str {
         if self.display.info_color.trim().is_empty() {
             &self.display.color
@@ -247,14 +256,15 @@ pub fn load_config(path: &Path) -> Result<Config, String> {
     if !path.exists() {
         return Ok(default);
     }
-    let text = std::fs::read_to_string(path).map_err(|e| format!("读取配置失败：{e}"))?;
-    let mut config: Config = toml::from_str(&text).map_err(|e| format!("解析配置文件失败：{e}"))?;
-    // path 不参与反序列化（`#[serde(skip)]`），手工补回来
+    let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read config: {e}"))?;
+    let mut config: Config =
+        toml::from_str(&text).map_err(|e| format!("cannot parse config file: {e}"))?;
+    // `path` does not take part in deserialisation (`#[serde(skip)]`), so put it back by hand
     config.path = default.path;
     Ok(config)
 }
 
-/// 可以写回 TOML 的值。
+/// A value that can be written back into the TOML file.
 #[derive(Debug, Clone)]
 pub enum Value {
     Bool(bool),
@@ -304,9 +314,11 @@ fn quote(text: &str) -> String {
     out
 }
 
-/// 就地把 `"节.键": 值` 写回 TOML，保留注释与原有顺序。
+/// Write `"section.key": value` pairs back into the TOML file in place,
+/// preserving comments and the existing key order.
 ///
-/// 缺失的键会追加到对应小节末尾；小节不存在则新建。
+/// Missing keys are appended to the end of their section; a missing section is
+/// created.
 pub fn patch_toml(path: &Path, updates: &[(&str, Value)]) -> Result<(), String> {
     let lines: Vec<String> = match std::fs::read_to_string(path) {
         Ok(text) => text.lines().map(|line| line.to_string()).collect(),
@@ -367,7 +379,7 @@ pub fn patch_toml(path: &Path, updates: &[(&str, Value)]) -> Result<(), String> 
             seen_sections.push(target_section);
             continue;
         }
-        // 小节已存在：插到该节最后一行键的后面
+        // Section already exists: insert after the last key line of that section
         let header = format!("[{target_section}]");
         let mut insert_at = out.len();
         for (index, existing) in out.iter().enumerate() {
@@ -391,11 +403,12 @@ pub fn patch_toml(path: &Path, updates: &[(&str, Value)]) -> Result<(), String> 
     let body = body.trim_end_matches('\n').to_string();
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
-            // 用户配置目录可能刚被清理掉，写之前确保它在
-            std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败：{e}"))?;
+            // The per-user config directory may just have been cleaned out;
+            // make sure it exists before writing.
+            std::fs::create_dir_all(parent).map_err(|e| format!("cannot create directory: {e}"))?;
         }
     }
-    std::fs::write(path, format!("{body}\n")).map_err(|e| format!("写入配置失败：{e}"))
+    std::fs::write(path, format!("{body}\n")).map_err(|e| format!("cannot write config: {e}"))
 }
 
 fn key_of(line: &str) -> Option<&str> {
@@ -411,7 +424,7 @@ fn key_of(line: &str) -> Option<&str> {
     Some(key)
 }
 
-/// 默认目标时间点：下一个整点。
+/// Default target time: the next full hour.
 pub fn default_target(now: NaiveDateTime) -> String {
     let shifted = now + Duration::hours(1);
     let next = shifted
@@ -421,104 +434,127 @@ pub fn default_target(now: NaiveDateTime) -> String {
     next.format("%Y-%m-%dT%H:%M:%S").to_string()
 }
 
-const TEMPLATE: &str = r##"# FloatClock 悬浮倒计时配置
-# 改完保存即可，程序约 1 秒内自动重载（无需重启）。
-# 命令行 --target / --offset 可临时覆盖本文件。
+const TEMPLATE: &str = r##"# FloatClock overlay countdown - configuration
+#
+# Save this file and the running overlay picks the change up within about a
+# second; there is no need to restart it.
+#
+# Precedence: --config <path>  >  $FLOAT_CLOCK_CONFIG  >  ./config.toml  >  this file.
+# The command-line flags --target / --offset override this file for one run.
+#
+# Every key below is optional: delete a line and the built-in default comes back.
 
 [window]
-# 浮窗左上角坐标（拖动后会自动写回这里）
+# Top-left corner of the overlay. Written back here automatically after a drag.
 x = @@X@@
 y = @@Y@@
-# 去掉标题栏，配合透明背景实现「只有文字」的悬浮效果
+# Drop the title bar, so that combined with the transparent background the
+# window really is "just the text".
 borderless = true
-# 永远置顶
+# Keep the overlay above every other window.
 topmost = true
-# 锁定后不能拖动（右键随时切换；锁定状态也会写回这里）
+# While locked the overlay cannot be dragged. Toggle with the right mouse button
+# (or the tray menu, or Cmd/Ctrl+L); the state is written back here.
 locked = false
-# 整体不透明度 0.05~1.0（透明背景已够用，一般保持 1.0）
+# Whole-window opacity, 0.05 .. 1.0. The transparent background is usually
+# enough, so this normally stays at 1.0.
 opacity = 1.0
+# Show a tray icon (macOS menu bar / Windows notification area) with a menu for
+# show-hide, lock, settings, opening this file, reloading and quitting.
+# Linux has no tray backend in this build; the setting is ignored there.
+tray = true
 
 [display]
-# 等宽字体；留空自动挑选系统等宽字体（Menlo / Consolas / DejaVu Sans Mono ...）
+# Monospace font family. Leave empty to auto-pick the system monospace font
+# (Menlo / SF Mono / Consolas / DejaVu Sans Mono / Liberation Mono ...).
 font_family = ""
-# 主标题（距离偏移还有多久）字号，单位 pt
+# Size of the main title (time left until the offset moment), in points.
 main_size = 46.0
-# 副标题（距离目标时间点过去了多久）字号
+# Size of the subtitle (time elapsed since the target moment).
 sub_size = 18.0
-# 绿色粗体
+# Bold green.
 color = "#00FF66"
-# 副标题颜色，留空表示跟主标题一致
+# Subtitle colour; empty means "same as the main colour".
 sub_color = ""
 bold = true
-# 超过一天时显示 DD:HH:MM:SS（所有位都补 0 对齐）
+# Show DD:HH:MM:SS once the remaining time passes a day, zero-padded so every
+# digit column lines up.
 show_days = true
-# 主副标题之间的间距（像素）
+# Gap between the title and the subtitle, in pixels.
 gap = 2
-# 第三行：目标时间点 + 偏移（绿底镂空字）。设成空字符串 "" 则整行不显示。
-# 可用占位符：
-#   {date} {time} {datetime}     目标时间点 T
-#   {mark} {mark_datetime}       偏移时刻 M = T + offset
-#   {delta}                      偏移的补零写法，如 +02:00:00
-#   {delta_human}                偏移的中文写法，如 +2 小时
-info_template = "{time} · {delta}"
-# 第三行字号
+# Third line: the target moment plus the offset, drawn as green text knocked out
+# of a solid green bar. Set it to "" to hide the line entirely.
+# Placeholders:
+#   {date} {time} {datetime}     the target moment T
+#   {mark} {mark_datetime}       the offset moment M = T + offset
+#   {delta}                      the offset, zero-padded, e.g. +02:00:00
+#   {delta_human}                the offset in words, e.g. +2 hours
+info_template = "{time} | {delta}"
+# Size of the third line.
 info_size = 14.0
-# 第三行颜色，留空 = 跟主标题一致（绿色）
+# Third line colour; empty means "same as the main colour" (green).
 info_color = ""
-# 第三行样式：
-#   "auto"     = 强制镂空（绿块 + 抠掉字），拿不到字体时退回普通绿字
-#   "knockout" = 同上
-#   "text"     = 普通绿字、透明底
+# Third line style:
+#   "auto"     = knockout when possible (green bar, glyphs punched out), and
+#                plain green text when no usable font is available
+#   "knockout" = force the knockout
+#   "text"     = plain green text on a transparent background
 info_style = "auto"
-# 不支持透明背景的平台（老 X11）上用的底色
+# Backing colour used on platforms that cannot do per-pixel transparency (old X11).
 background = "#101010"
-# 刷新间隔（毫秒）
+# Refresh interval, in milliseconds.
 interval_ms = 200
-# 锁定状态指示：border = 用外框线表示（实线=锁定，虚线=可拖动），none = 不显示
+# Lock indicator: "border" draws a frame (solid = locked, dashed = draggable),
+# "none" draws nothing.
 lock_indicator = "border"
-# 外框线颜色，留空 = 跟文字同色
+# Frame colour; empty means "same as the text".
 border_color = ""
-# 外框线宽（像素）
+# Frame width, in pixels.
 border_width = 2
-# true：锁定时实线、解锁时虚线；false 反过来
+# true: solid while locked and dashed while unlocked; false swaps the two.
 solid_when_locked = true
-# 文字渲染倍率上限（Retina / HiDPI 上自动跟随显示器缩放，此项只是上限）
+# Ceiling for the text rasterisation scale. Retina / HiDPI displays are followed
+# automatically; this only caps how far that can go.
 max_scale = 2.0
-# 显示模板：{sign} 就是 + / -，{clock} 是补零时间
+# Display templates. {sign} is + or -, {clock} is the zero-padded time.
 main_template = "T{sign}{clock}"
 sub_template = "T{sign}{clock}"
 
 [time]
-# 目标时间点。支持：
+# The target moment. Accepted forms:
 #   2026-01-01T09:30:00   2026-01-01 09:30   2026-01-01
-#   09:30:00（今天该时刻，已过则自动顺延到明天 —— 每天重复的日程用这种写法）
-#   +1h30m（相对现在）
-# 绝对时间点过去之后，显示会自然翻转成 T+…
+#   09:30:00   (that time today, rolling over to tomorrow once it has passed -
+#               use this for a daily recurring schedule)
+#   +1h30m     (relative to now)
+# Once an absolute moment is in the past the display flips to T+ on its own.
 target = "@@TARGET@@"
-# 偏移。主标题倒计时指向的时刻 = 目标时间点 + 偏移。
-# 支持 -00:05:00 / 5:00 / 1h30m / -300 / 0 等写法
+# The offset. The main countdown points at  target + offset.
+# Accepts -00:05:00 / 5:00 / 1h30m / -300 / 0 and friends.
 offset = "@@OFFSET@@"
 
 [notify]
-# 总开关
+# Master switch.
 enabled = true
-# 在每个时间点【之前】这些秒数各提醒一次
+# Fire a notification this many seconds BEFORE each moment.
 before = [3600, 1800, 900, 600, 300, 180, 120, 60, 30, 10, 5, 3, 2, 1]
-# 在每个时间点【之后】这些秒数各提醒一次
+# Fire a notification this many seconds AFTER each moment.
 after = [1, 5, 30, 60, 300]
-# 正点提醒
+# Notify exactly on the moment itself.
 at_moment = true
-# 通知声音
+# Play a sound.
 sound = true
-# macOS 提示音：Glass / Ping / Pop / Funk / Basso / Blow / Bottle / Frog / Hero / Morse / Purr / Sosumi / Submarine / Tink
+# macOS alert sound: Glass / Ping / Pop / Funk / Basso / Blow / Bottle / Frog /
+# Hero / Morse / Purr / Sosumi / Submarine / Tink
 sound_name = "Glass"
-# 通知文案模板（纯文本，不带 emoji，用 [] 这类符号做装饰）。占位符：
-#   {label} 时间点名称   {sign} - 或 +   {clock} 补零时间   {human} 人话时长
-#   {time} 该时刻 HH:MM:SS   {datetime} 该时刻完整时间
+# Notification templates (plain text, no emoji - use [ ] and friends if you want
+# decoration). Placeholders:
+#   {label}    name of the moment      {sign}     - or +
+#   {clock}    zero-padded time        {human}    duration in words ("2m")
+#   {time}     that moment as HH:MM:SS {datetime} that moment in full
 title_template = "[T{sign}{clock}] {label}"
-body_before = "距离{label}还有 {human}"
-body_at = "{label}已到 · {time}"
-body_after = "{label}已过去 {human}"
+body_before = "{human} until {label}"
+body_at = "{label} reached at {time}"
+body_after = "{label} passed {human} ago"
 "##;
 
 pub fn write_default_config(
@@ -530,7 +566,7 @@ pub fn write_default_config(
 ) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败：{e}"))?;
+            std::fs::create_dir_all(parent).map_err(|e| format!("cannot create directory: {e}"))?;
         }
     }
     let target = if target.trim().is_empty() {
@@ -543,7 +579,7 @@ pub fn write_default_config(
         .replace("@@Y@@", &y.to_string())
         .replace("@@TARGET@@", &target)
         .replace("@@OFFSET@@", offset);
-    std::fs::write(path, text).map_err(|e| format!("写入配置失败：{e}"))
+    std::fs::write(path, text).map_err(|e| format!("cannot write config: {e}"))
 }
 
 #[cfg(test)]
@@ -558,7 +594,7 @@ mod tests {
 
     #[test]
     fn user_config_dir_follows_platform_convention() {
-        let dir = user_config_dir().expect("测试机上应该有 HOME");
+        let dir = user_config_dir().expect("the test machine should have HOME");
         let text = dir.to_string_lossy();
         if cfg!(target_os = "macos") {
             assert!(
@@ -575,7 +611,8 @@ mod tests {
     #[test]
     fn explicit_config_env_var_wins() {
         let path = temp_path("env");
-        // 这个变量只在本进程里改，测试是串行跑同一进程，所以用完立刻还原
+        // Only this process sees the variable, and the tests share one process,
+        // so restore whatever was there as soon as we are done.
         let before = std::env::var_os("FLOAT_CLOCK_CONFIG");
         std::env::set_var("FLOAT_CLOCK_CONFIG", &path);
         assert_eq!(resolve_config_path(), path);
@@ -594,6 +631,7 @@ mod tests {
         assert_eq!(config.info_color(), "#00FF66");
         assert_eq!(config.interval_ms(), 200);
         assert!(config.notify.before.contains(&120));
+        assert!(config.window.tray);
     }
 
     #[test]
@@ -612,7 +650,7 @@ mod tests {
         let config = load_config(&path).unwrap();
         assert_eq!(config.display.color, "#FF0000");
         assert_eq!(config.display.main_size, 60.0);
-        // 没写的键仍然是默认值
+        // Keys that were not written still hold their defaults
         assert_eq!(config.display.sub_size, 18.0);
         assert!(config.notify.enabled);
         let _ = std::fs::remove_file(&path);
@@ -623,7 +661,7 @@ mod tests {
         let path = temp_path("patch");
         std::fs::write(
             &path,
-            "# 顶部注释\n[window]\n# 坐标\nx = 1\ny = 2\n\n[time]\ntarget = \"09:00\"\n",
+            "# leading comment\n[window]\n# the coordinates\nx = 1\ny = 2\n\n[time]\ntarget = \"09:00\"\n",
         )
         .unwrap();
         patch_toml(
@@ -636,13 +674,13 @@ mod tests {
         )
         .unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
-        assert!(text.contains("# 顶部注释"));
-        assert!(text.contains("# 坐标"));
+        assert!(text.contains("# leading comment"));
+        assert!(text.contains("# the coordinates"));
         assert!(text.contains("x = 120"));
         assert!(text.contains("y = 2"));
         assert!(text.contains("locked = true"));
         assert!(text.contains("offset = \"-5m\""));
-        // 重新读回来确认是合法 TOML
+        // Read it back to confirm the result is still valid TOML
         let config = load_config(&path).unwrap();
         assert_eq!(config.window.x, 120);
         assert!(config.window.locked);
@@ -670,11 +708,11 @@ mod tests {
         let config = load_config(&path).unwrap();
         assert_eq!(config.time.target, "2026-09-19T20:29:00");
         assert_eq!(config.time.offset, "+120m");
-        assert_eq!(config.display.info_template, "{time} · {delta}");
+        assert_eq!(config.display.info_template, "{time} | {delta}");
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(
-            text.contains("{time} · {delta}"),
-            "模板里的花括号不能被吃掉"
+            text.contains("{time} | {delta}"),
+            "the braces in the template must survive the round trip"
         );
         let _ = std::fs::remove_file(&path);
     }
@@ -685,5 +723,47 @@ mod tests {
         assert_eq!(Value::Bool(false).to_toml(), "false");
         assert_eq!(Value::IntList(vec![1, 2]).to_toml(), "[1, 2]");
         assert_eq!(Value::Float(1.0).to_toml(), "1.0");
+    }
+
+    /// `config.example.toml` is shipped inside every release archive and linked
+    /// from the README, so it has to stay in step with the template that
+    /// `--init-config` writes. Rather than reviewing two copies by hand, this
+    /// pins them together: the example must be exactly the template with the
+    /// placeholders filled in.
+    #[test]
+    fn the_shipped_example_matches_the_generated_template() {
+        let expected = TEMPLATE
+            .replace("@@X@@", "80")
+            .replace("@@Y@@", "80")
+            .replace("@@TARGET@@", "2026-09-19T20:29:00")
+            .replace("@@OFFSET@@", "-00:05:00");
+        let example = include_str!("../config.example.toml");
+        assert_eq!(
+            example, expected,
+            "config.example.toml has drifted from the template in src/config.rs; \
+             regenerate it with `float-clock --init-config` and fill the placeholders in"
+        );
+    }
+
+    /// The same for the plain-text quickstart that goes into every archive: it
+    /// should not quote flag names that no longer exist.
+    #[test]
+    fn the_quickstart_only_mentions_real_flags() {
+        let quickstart = include_str!("../QUICKSTART.txt");
+        for flag in [
+            "--config",
+            "--config-path",
+            "--init-config",
+            "--print",
+            "--test-notify",
+            "--diagnose",
+            "--render-png",
+            "--help",
+        ] {
+            assert!(
+                quickstart.contains(flag),
+                "QUICKSTART.txt should mention {flag}"
+            );
+        }
     }
 }

@@ -1,4 +1,4 @@
-//! 命令行入口。
+//! Command-line entry point.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -16,38 +16,49 @@ use float_clock::timefmt::{self, format_hms, parse_duration, parse_target};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const USAGE: &str = "\
-float-clock —— 无背景悬浮 T± 倒计时
+float-clock - a borderless, transparent T+/- countdown overlay
 
-用法:
-    float-clock [选项]
+USAGE:
+    float-clock [OPTIONS]
 
-选项:
-    --config <路径>        指定配置文件（默认 ./config.toml）
-    --init-config          生成默认配置文件后退出
-    --force                配合 --init-config，覆盖已存在的文件
-    --target <时间点>      临时覆盖 [time] target
-    --offset <时长>        临时覆盖 [time] offset
-    --print                打印当前状态与接下来的提醒后退出（不开窗口）
-    --render-png <路径>    把悬浮窗渲染成 PNG 后退出（不开窗口）
-    --scale <倍数>         配合 --render-png，渲染倍率（默认 2）
-    --now <时间点>         配合 --print / --render-png，指定「现在」（便于复现）
-    --diagnose             打印环境与渲染诊断信息后退出
-    --test-notify          发一条测试通知后退出
-    --settings             启动时直接打开设置窗口
-    --no-transparent       强制不透明背景（排障用）
-    --probe <秒数>         窗口起来后从 GPU 回读一次真实像素并打印体检报告（排障用）
-    --probe-png <路径>     配合 --probe，把回读到的像素写成 PNG
-    -h, --help             显示本帮助
-    -V, --version          显示版本
+OPTIONS:
+    --config <PATH>        use this config file (default: see --config-path)
+    --config-path          print the config file that would be used, then exit
+    --init-config          write a default config file, then exit
+    --force                with --init-config, overwrite an existing file
+    --target <WHEN>        override [time] target for this run
+    --offset <DURATION>    override [time] offset for this run
+    --settings             open the settings window on startup
+    --print                print the current state and the upcoming reminders, then exit
+    --render-png <PATH>    render the overlay to a PNG, then exit (no window)
+    --scale <FACTOR>       with --render-png, the render scale (default 2)
+    --now <WHEN>           with --print / --render-png, pretend it is this time
+    --diagnose             print environment and render diagnostics, then exit
+    --test-notify          send one test notification, then exit
+    --no-transparent       force an opaque background (troubleshooting)
+    --probe <SECONDS>      read the real pixels back from the GPU after N seconds
+                           and print a report (troubleshooting)
+    --probe-png <PATH>     with --probe, write the read-back pixels to this PNG
+    -h, --help             show this help
+    -V, --version          show the version
 
-交互:
-    左键拖动移动 · 右键锁定/解锁（实线=锁定，虚线=可拖动）· 双击打开设置
-    Ctrl+L 锁定 · Ctrl+R 重载配置 · Ctrl+Q 退出
+INTERACTION:
+    drag with the left mouse button  ·  right-click locks / unlocks
+    (solid frame = locked, dashed = draggable)
+    double-click opens the settings window
+    Cmd/Ctrl+L lock  ·  Cmd/Ctrl+, settings  ·  Cmd/Ctrl+R reload config
+    Cmd/Ctrl+H hide or show  ·  Cmd/Ctrl+Q quit
+
+Both moments get a system notification as they approach: T is the target time
+you configure, M is T plus the offset, and the main title counts down to M while
+the subtitle counts since T. See config.example.toml for every setting.
 ";
 
-/// Windows 上双击打开时，控制台子系统会先弹出一个黑框。
-/// 这里保留控制台子系统（这样 `--print` / `--diagnose` 的输出在任何情况下都正常），
-/// 只在「没有任何命令行参数」也就是双击启动的情况下，把那个黑框藏起来。
+/// On Windows, launching from Explorer pops up a console box first, because the
+/// binary is built for the console subsystem. The console subsystem is kept on
+/// purpose - that way `--print` / `--diagnose` output always works - but when
+/// there are no arguments at all, i.e. this is a double-click, the box is hidden
+/// again before it has a chance to be seen.
 #[cfg(target_os = "windows")]
 fn hide_console_for_double_click() {
     const SW_HIDE: i32 = 0;
@@ -68,7 +79,7 @@ fn hide_console_for_double_click() {
 fn hide_console_for_double_click() {}
 
 fn main() -> ExitCode {
-    // 必须是第一件事，越早越好，黑框才来不及显示
+    // This has to be the very first thing, before the box has time to appear.
     if std::env::args_os().len() <= 1 {
         hide_console_for_double_click();
     }
@@ -84,6 +95,7 @@ fn main() -> ExitCode {
 #[derive(Default)]
 struct Args {
     config: Option<PathBuf>,
+    config_path: bool,
     init_config: bool,
     force: bool,
     target: Option<String>,
@@ -108,23 +120,31 @@ fn run() -> Result<(), String> {
         .clone()
         .unwrap_or_else(config::resolve_config_path);
 
+    if args.config_path {
+        println!("{}", config_path.display());
+        return Ok(());
+    }
+
     if args.init_config {
         if config_path.exists() && !args.force {
             return Err(format!(
-                "{} 已经存在（要覆盖请加 --force）",
+                "{} already exists (pass --force to overwrite it)",
                 config_path.display()
             ));
         }
         config::write_default_config(&config_path, 80, 80, "", "-00:05:00")?;
-        println!("已生成 {}", config_path.display());
+        println!("wrote {}", config_path.display());
         return Ok(());
     }
 
-    // 第一次跑（尤其是双击打开）时配置文件还不存在：直接落一份默认的，
-    // 不然之后拖动窗口要写回坐标才发现没地方写。
+    // The very first run - a double-click, most likely - has no config file yet.
+    // Write one immediately, otherwise there is nowhere to store the window
+    // position the moment the user drags it.
+    let mut first_run = false;
     if !config_path.exists() {
         config::write_default_config(&config_path, 80, 80, "", "-00:05:00")?;
-        println!("已生成默认配置 {}", config_path.display());
+        println!("wrote a default config to {}", config_path.display());
+        first_run = true;
     }
 
     let mut config = config::load_config(&config_path)?;
@@ -141,15 +161,15 @@ fn run() -> Result<(), String> {
             .sound
             .then(|| config.notify.sound_name.clone());
         let sent = notify::send(
-            "[T-00:00:00] FloatClock 测试",
-            "看到这条说明系统通知是通的",
+            "[T-00:00:00] FloatClock test",
+            "If you can see this, system notifications work",
             sound.as_deref(),
         );
-        println!("通知后端：{}", notify::backend());
+        println!("notification backend: {}", notify::backend());
         return if sent {
             Ok(())
         } else {
-            Err("发送通知失败".into())
+            Err("could not send a notification".into())
         };
     }
 
@@ -169,7 +189,7 @@ fn run() -> Result<(), String> {
     if let Some(path) = &args.render_png {
         let overlay = build_overlay(&config, now, args.scale.unwrap_or(2.0), true)?;
         std::fs::write(path, overlay.pixmap.to_png()?)
-            .map_err(|e| format!("写入 PNG 失败：{e}"))?;
+            .map_err(|e| format!("could not write the PNG: {e}"))?;
         for line in &overlay.layout.lines {
             println!(
                 "{:>7.1},{:<7.1} {:>5.1}pt {:>7.1}px  {}{}",
@@ -178,11 +198,11 @@ fn run() -> Result<(), String> {
                 line.size,
                 line.width,
                 line.text,
-                if line.knockout { "   [镂空]" } else { "" }
+                if line.knockout { "   [knockout]" } else { "" }
             );
         }
         println!(
-            "已写出 {}（{} × {} 像素，倍率 {}）",
+            "wrote {} ({} x {} pixels, scale {})",
             path.display(),
             overlay.width(),
             overlay.height(),
@@ -191,10 +211,15 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
 
+    // First run: open the settings window, because otherwise the only way to
+    // discover how to configure this thing is to read the source.
+    let open_settings =
+        args.settings || (first_run && std::env::var_os("FLOAT_CLOCK_NO_SETUP").is_none());
+
     app::run(
         config,
         RunOptions {
-            open_settings: args.settings,
+            open_settings,
             force_opaque: args.no_transparent,
             probe_after: args.probe.map(std::time::Duration::from_secs_f32),
             probe_png: args.probe_png.clone(),
@@ -206,7 +231,7 @@ fn parse_args() -> Result<Args, String> {
     let mut args = Args::default();
     let mut argv = std::env::args().skip(1).peekable();
     while let Some(arg) = argv.next() {
-        // 支持 --opt=value 与 --opt value 两种写法
+        // Accept both --opt=value and --opt value
         let (flag, inline) = match arg.split_once('=') {
             Some((flag, value)) => (flag.to_string(), Some(value.to_string())),
             None => (arg, None),
@@ -214,7 +239,9 @@ fn parse_args() -> Result<Args, String> {
         let mut take = |name: &str| -> Result<String, String> {
             match &inline {
                 Some(value) => Ok(value.clone()),
-                None => argv.next().ok_or_else(|| format!("{name} 后面需要一个值")),
+                None => argv
+                    .next()
+                    .ok_or_else(|| format!("{name} needs a value after it")),
             }
         };
         match flag.as_str() {
@@ -227,6 +254,7 @@ fn parse_args() -> Result<Args, String> {
                 std::process::exit(0);
             }
             "--config" => args.config = Some(PathBuf::from(take("--config")?)),
+            "--config-path" => args.config_path = true,
             "--init-config" => args.init_config = true,
             "--force" => args.force = true,
             "--target" => args.target = Some(take("--target")?),
@@ -237,7 +265,7 @@ fn parse_args() -> Result<Args, String> {
                 args.scale = Some(
                     take("--scale")?
                         .parse()
-                        .map_err(|_| "--scale 需要一个数字".to_string())?,
+                        .map_err(|_| "--scale needs a number".to_string())?,
                 )
             }
             "--now" => args.now = Some(take("--now")?),
@@ -250,10 +278,10 @@ fn parse_args() -> Result<Args, String> {
                 args.probe = Some(
                     take("--probe")?
                         .parse()
-                        .map_err(|_| "--probe 需要一个秒数".to_string())?,
+                        .map_err(|_| "--probe needs a number of seconds".to_string())?,
                 )
             }
-            other => return Err(format!("无法识别的参数：{other}（用 --help 看看用法）")),
+            other => return Err(format!("unrecognised argument: {other} (try --help)")),
         }
     }
     Ok(args)
@@ -297,52 +325,53 @@ fn print_status(config: &Config, now: NaiveDateTime) -> Result<(), String> {
     let (target, mark, offset) = moment_text(config, now)?;
     let overlay = build_overlay(config, now, 1.0, true)?;
 
-    println!("现在          : {}", timefmt::datetime_of(now));
-    println!("目标时间点 T  : {}", timefmt::datetime_of(target));
+    println!("now          : {}", timefmt::datetime_of(now));
+    println!("target  T    : {}", timefmt::datetime_of(target));
     println!(
-        "偏移时刻   M  : {}   （偏移 {}）",
+        "offset  M    : {}   (offset {})",
         timefmt::datetime_of(mark),
         format_hms(offset.round() as i64, true)
     );
-    println!("主标题        : {}", overlay.layout.lines[0].text);
-    println!("副标题        : {}", overlay.layout.lines[1].text);
+    println!("main title   : {}", overlay.layout.lines[0].text);
+    println!("subtitle     : {}", overlay.layout.lines[1].text);
     if let Some(info) = overlay.layout.lines.get(2) {
         println!(
-            "第三行        : {}{}",
+            "third line   : {}{}",
             info.text,
             if info.knockout {
-                "（绿块镂空）"
+                " (knocked out of a green bar)"
             } else {
-                "（普通绿字）"
+                " (plain green text)"
             }
         );
     }
     println!(
-        "窗口尺寸      : {} × {} 像素",
+        "window size  : {} x {} pixels",
         overlay.width(),
         overlay.height()
     );
     println!(
-        "锁定状态      : {}",
+        "lock state   : {}",
         if config.window.locked {
-            "锁定（实线框）"
+            "locked (solid frame)"
         } else {
-            "解锁（虚线框）"
+            "unlocked (dashed frame)"
         }
     );
-    println!("通知后端      : {}", notify::backend());
+    println!("notify via   : {}", notify::backend());
 
     let mut notifier = MomentNotifier::new(config.notify.clone());
     notifier.arm(
         vec![
-            ("偏移时刻".to_string(), mark),
-            ("目标时间点".to_string(), target),
+            ("Offset moment".to_string(), mark),
+            ("Target time".to_string(), target),
         ],
         now,
     );
-    println!("接下来的提醒  :");
-    // 两个时刻各自的提醒交错在一起，直接取前 N 条会被其中一个占满，
-    // 所以按时刻分组，每个时刻只展示最靠前的几条。
+    println!("upcoming reminders:");
+    // The two moments' reminders are interleaved, so simply taking the first N
+    // would let one moment fill the whole list. Group by moment and show only
+    // the nearest few of each.
     const PER_MOMENT: usize = 6;
     let mut seen: Vec<(String, usize)> = Vec::new();
     let mut shown = Vec::new();
@@ -362,40 +391,47 @@ fn print_status(config: &Config, now: NaiveDateTime) -> Result<(), String> {
 }
 
 fn print_diagnose(config: &Config, path: &Path, now: NaiveDateTime) -> Result<(), String> {
-    println!("float-clock   : {VERSION}");
-    println!("平台          : {}", std::env::consts::OS);
-    println!("配置文件      : {}", path.display());
+    println!("float-clock  : {VERSION}");
+    println!("platform     : {}", std::env::consts::OS);
+    println!("config file  : {}", path.display());
     println!(
-        "透明背景      : {}",
-        if cfg!(target_os = "linux") {
-            "需要合成器（compositor）才有效，否则铺 background 底色"
-        } else {
-            "窗口级 alpha，直接和桌面合成"
+        "tray icon    : {}",
+        match float_clock::tray::unavailable_reason() {
+            None => "available",
+            Some(reason) => reason,
         }
     );
-    println!("通知后端      : {}", notify::backend());
+    println!(
+        "transparency : {}",
+        if cfg!(target_os = "linux") {
+            "needs a compositor, otherwise the [display] background fills in"
+        } else {
+            "per-window alpha, composited straight onto the desktop"
+        }
+    );
+    println!("notify via   : {}", notify::backend());
 
     let fonts = Fonts::load(&config.display.font_family)?;
     println!(
-        "等宽字体      : {}{}",
+        "monospace    : {}{}",
         fonts.primary_name,
         match &fonts.fallback_name {
-            Some(name) => format!("   兜底字体：{name}"),
-            None => "   （没找到兜底字体）".to_string(),
+            Some(name) => format!("   fallback: {name}"),
+            None => "   (no fallback font found)".to_string(),
         }
     );
 
     let overlay = build_overlay(config, now, 1.0, true)?;
     println!(
-        "渲染          : {} × {} 像素，{} 行",
+        "render       : {} x {} pixels, {} lines",
         overlay.width(),
         overlay.height(),
         overlay.layout.lines.len()
     );
     for line in &overlay.layout.lines {
         println!(
-            "    {:<4} {:>5.1}pt  {:<26} x={:.1} y={:.1} w={:.1}",
-            if line.knockout { "镂空" } else { "文字" },
+            "    {:<8} {:>5.1}pt  {:<26} x={:.1} y={:.1} w={:.1}",
+            if line.knockout { "knockout" } else { "text" },
             line.size,
             line.text,
             line.x,

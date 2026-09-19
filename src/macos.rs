@@ -1,14 +1,16 @@
-//! macOS 专用：直接读 NSWindow 的真实绘制像素，验证「背景是不是真的透明」。
+//! macOS only: read the pixels an NSWindow actually drew, to prove that the
+//! background really is transparent.
 //!
-//! 屏幕截图要「屏幕录制」权限，命令行里经常拿不到；这里改用
-//! `cacheDisplayInRect:toBitmapImageRep:` 把窗口内容渲染进位图再读 alpha，
-//! 是同一台机器上唯一能拿到地面真相的办法。
+//! Taking a screenshot needs the Screen Recording permission, which a command
+//! line process rarely has. Rendering the window into a bitmap with
+//! `cacheDisplayInRect:toBitmapImageRep:` and then reading the alpha channel is
+//! the only way to get at the ground truth on the same machine.
 #![cfg(target_os = "macos")]
 
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSBitmapImageRep};
 
-/// 一次窗口像素体检的结果。
+/// The outcome of one window pixel health check.
 #[derive(Debug, Clone)]
 pub struct WindowProbe {
     pub title: String,
@@ -17,33 +19,33 @@ pub struct WindowProbe {
     pub level: i64,
     pub has_shadow: bool,
     pub style_mask: u64,
-    /// 位图尺寸（Retina 上是「点」的两倍）
+    /// Bitmap size; on a Retina display this is twice the size in points
     pub width: usize,
     pub height: usize,
-    /// alpha <= 8 的像素占比
+    /// Share of pixels with alpha <= 8
     pub transparent_ratio: f64,
-    /// 出现次数最多的 alpha —— 浮窗背景就该是 0
+    /// The most common alpha value - which should be 0 for the overlay background
     pub dominant_alpha: u8,
-    /// 绿色（G 明显大于 R/B）且不透明的像素数
+    /// Opaque pixels that are green (G clearly above R and B)
     pub green_pixels: usize,
-    /// 完全透明的像素数
+    /// Number of fully transparent pixels
     pub holes: usize,
 }
 
 impl WindowProbe {
     pub fn report(&self) -> String {
         format!(
-            "窗口标题      : {}\n\
-             窗口不透明标志: {}  （true 表示系统把整窗当成不透明，背景就会变黑）\n\
-             窗口背景 alpha: {:.3}\n\
-             窗口层级      : {}  （3 = 悬浮在所有窗口之上）\n\
-             有阴影        : {}\n\
-             样式掩码      : {:#x}  （无边框时最低位为 0）\n\
-             内容位图      : {} × {} 像素\n\
-             背景 alpha 众数: {}\n\
-             透明像素占比  : {:.1}%\n\
-             绿色像素      : {}\n\
-             全透明像素    : {}",
+            "window title      : {}\n\
+             window is opaque  : {}  (true means the system treats the whole window as opaque)\n\
+             window bg alpha   : {:.3}\n\
+             window level      : {}  (3 = floats above every other window)\n\
+             has shadow        : {}\n\
+             style mask        : {:#x}  (lowest bit is 0 when borderless)\n\
+             content bitmap    : {} x {} pixels\n\
+             dominant bg alpha : {}\n\
+             transparent share : {:.1}%\n\
+             green pixels      : {}\n\
+             fully transparent : {}",
             self.title,
             self.is_opaque,
             self.background_alpha,
@@ -60,7 +62,8 @@ impl WindowProbe {
     }
 }
 
-/// 找到标题里含 `title_contains` 的窗口，把它渲染进位图统计 alpha。
+/// Find the window whose title contains `title_contains`, render it into a
+/// bitmap and measure its alpha channel.
 pub fn probe(title_contains: &str) -> Option<WindowProbe> {
     let mtm = MainThreadMarker::new()?;
     let app = NSApplication::sharedApplication(mtm);
@@ -137,18 +140,21 @@ pub fn probe(title_contains: &str) -> Option<WindowProbe> {
     None
 }
 
-/// 悬浮窗要的是「只有文字」：关掉系统阴影，并且不在 Dock 里占一个图标。
+/// The overlay should be nothing but text: turn the system shadow off, and do
+/// not take up an icon in the Dock.
 pub fn tune_window() {
     let Some(mtm) = MainThreadMarker::new() else {
         return;
     };
     let app = NSApplication::sharedApplication(mtm);
-    // Accessory：可以有窗口，但不进 Dock、不抢菜单栏
+    // Accessory: may own windows, but stays out of the Dock and does not take
+    // over the menu bar. The tray icon is an NSStatusItem and works fine here.
     if app.activationPolicy() != NSApplicationActivationPolicy::Accessory {
         let _ = app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
     }
     for window in app.windows().iter() {
-        // 系统会按窗口 alpha 算阴影，透明浮窗外面会多出一圈灰边
+        // The system derives the shadow from the window alpha, which puts a
+        // grey halo around a transparent overlay
         if window.hasShadow() {
             window.setHasShadow(false);
         }

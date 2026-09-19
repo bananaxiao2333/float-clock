@@ -1,60 +1,64 @@
 # FloatClock
 
-**无背景悬浮 T± 倒计时**——窗口里只有绿色粗体等宽文字，可以拖动、可以锁定，临近设定时刻会弹系统通知。
+**A borderless, transparent, always-on-top countdown overlay.** The window contains nothing but bold green monospace text: it drags, it locks, and both of its moments fire a system notification as they approach.
 
 [![CI](https://github.com/bananaxiao2333/float-clock/actions/workflows/ci.yml/badge.svg)](https://github.com/bananaxiao2333/float-clock/actions/workflows/ci.yml)
 [![Release](https://github.com/bananaxiao2333/float-clock/actions/workflows/release.yml/badge.svg)](https://github.com/bananaxiao2333/float-clock/actions/workflows/release.yml)
-[![Release 下载](https://img.shields.io/github/v/release/bananaxiao2333/float-clock?label=%E4%B8%8B%E8%BD%BD&sort=semver)](https://github.com/bananaxiao2333/float-clock/releases/latest)
-[![下载量](https://img.shields.io/github/downloads/bananaxiao2333/float-clock/total)](https://github.com/bananaxiao2333/float-clock/releases)
+[![Release](https://img.shields.io/github/v/release/bananaxiao2333/float-clock?label=download&sort=semver)](https://github.com/bananaxiao2333/float-clock/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/bananaxiao2333/float-clock/total)](https://github.com/bananaxiao2333/float-clock/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![更新日志](https://img.shields.io/badge/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97-CHANGELOG-informational)](CHANGELOG.md)
+[![CHANGELOG](https://img.shields.io/badge/changelog-CHANGELOG-informational)](CHANGELOG.md)
 
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-000000?logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%7C%20Linux%20%7C%20Windows-2ea44f)](#%E5%B9%B3%E5%8F%B0%E5%B7%AE%E5%BC%82)
-[![单文件](https://img.shields.io/badge/%E5%8D%95%E6%96%87%E4%BB%B6-%E6%97%A0%E8%BF%90%E8%A1%8C%E6%97%B6-6f42c1)](#%E5%BF%AB%E9%80%9F%E5%BC%80%E5%A7%8B)
-[![测试](https://img.shields.io/badge/test-61%20passed-success)](#%E4%BB%8E%E6%BA%90%E7%A0%81%E6%9E%84%E5%BB%BA)
-[![无背景](https://img.shields.io/badge/%E8%83%8C%E6%99%AF-%E7%9C%9F%E9%80%8F%E6%98%8E-00FF66)](#%E5%B9%B3%E5%8F%B0%E5%B7%AE%E5%BC%82)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-2ea44f)](#platform-differences)
+[![Single file](https://img.shields.io/badge/single%20file-no%20runtime-6f42c1)](#quick-start)
+[![Tests](https://img.shields.io/badge/test-69%20passed-success)](#building-from-source)
+[![Background](https://img.shields.io/badge/background-transparent-00FF66)](#platform-differences)
+[![Tray](https://img.shields.io/badge/tray-macOS%20%7C%20Windows-0078D4)](#the-tray-icon)
 
-用 Rust 写的，同一个代码库交叉编译出 **macOS / Linux / Windows** 三个平台的**单文件**可执行程序，
-双击就能跑，不需要装 Python、不需要运行时。
+Written in Rust: one codebase cross-compiles to single-file executables for **macOS, Linux and Windows**. Double-click and it runs, with no Python and no runtime to install.
 
-[Python 版](https://github.com/bananaxiao2333/float-clock/tree/python)在 `python` 分支上（最早用 uv + Tk 的实现）。
+The [Python version](https://github.com/bananaxiao2333/float-clock/tree/python) (the original uv + Tk implementation) lives on the `python` branch.
 
-```
-T-02:29:00          ← 主标题：距离「偏移时刻」还有多久
-  T-00:29:00        ← 副标题：距离「目标时间点」过去了多久
-▐20:29:00 · +02:00:00▌  ← 第三行：目标时间点 + 偏移（绿底镂空字）
+```text
+T-02:29:00            main title: time left until the offset moment
+  T-00:29:00          subtitle: time elapsed since the target time
+20:29:00 | +02:00:00  third line: target time and offset
 ```
 
 ---
 
-## 快速开始
+## Quick start
 
-### 1. 下载
+### 1. Download
 
-到 [**Releases**](https://github.com/bananaxiao2333/float-clock/releases/latest) 下对应平台的那个文件。
+Every platform publishes one `.zip` and nothing else. Grab it from [**Releases**](https://github.com/bananaxiao2333/float-clock/releases/latest):
 
-| 平台 | 下载这个 | 怎么跑 |
+| Platform | Download this | How to run it |
 | --- | --- | --- |
-| **macOS** | `float-clock-macos-universal.zip` | 解压 → 双击 `FloatClock.app`（Intel / Apple Silicon 通用） |
-| **Linux** | `float-clock-linux-x86_64.tar.gz` | `tar -xzf` → `./float-clock-linux-x86_64` |
-| **Windows** | `float-clock-windows-x86_64.exe` | 双击 |
+| **macOS** | `float-clock-macos-universal.zip` | unpack, then double-click `FloatClock.app` (universal arm64 + x86_64) |
+| **Linux** | `float-clock-linux-x86_64.zip` | unpack, then `chmod +x float-clock && ./float-clock` |
+| **Windows** | `float-clock-windows-x86_64.zip` | unpack, then double-click `float-clock.exe` |
 
-> **macOS 别下裸二进制。** Release 里那个不带 `.zip` 的 `float-clock-macos-universal`
-> 是给脚本/终端用的：浏览器下载会把可执行位抹掉，Finder 于是把它当文本文件丢给「文本编辑」，
-> 弹出一句 **「无法打开文件，文字编码 Unicode (UTF-8) 不适用」**。
-> 想手动用的话先 `chmod +x float-clock-macos-universal`。
+Each archive also contains `QUICKSTART.txt` (a plain-text getting-started guide) and `config.example.toml` (a fully commented example config).
 
-> **macOS 首次打开**如果提示「无法验证开发者」，右键 →「打开」放行一次即可（没做公证，不是毒）。
-> 也可以用终端绕过：`xattr -dr com.apple.quarantine FloatClock.app`。
+Bare binaries are **not** published any more. A browser download strips the executable bit, and Finder then treats a bare Mach-O binary as a text file: it hands it to TextEdit, which reports *"the text encoding Unicode (UTF-8) is not applicable"*. A zip records the file mode, so unpacking restores it. Shipping one archive format for every platform also removes the "which file do I download?" question.
 
-同一个 Release 里还有 `SHA256SUMS`，想核对的话：
+Unpack the archive before running anything; do not launch the executable straight out of an archive viewer.
+
+Platform notes:
+
+* **macOS** - the app is ad-hoc signed but not notarized. On first launch, right-click the app and choose **Open** once, or clear the quarantine flag: `xattr -dr com.apple.quarantine FloatClock.app`.
+* **Linux** - needs glibc 2.28 or newer (Ubuntu 20.04, Debian 10 and later). It links only `libc`, `libm`, `libpthread` and `libdl`; X11 and GL are `dlopen`'d at runtime. `unzip` (or your file manager) restores the executable bit.
+* **Windows** - the icon and the version block are embedded in the exe. SmartScreen may warn about an unknown publisher: **More info** → **Run anyway**.
+
+The same release carries `SHA256SUMS`:
 
 ```bash
 shasum -a 256 -c SHA256SUMS        # macOS / Linux
 ```
 
-Linux 上还可以把图标装上（可选）：
+Optionally, install the icon on Linux:
 
 ```bash
 mkdir -p ~/.local/share/icons/hicolor/512x512/apps
@@ -62,79 +66,99 @@ curl -L -o ~/.local/share/icons/hicolor/512x512/apps/float-clock.png \
   https://raw.githubusercontent.com/bananaxiao2333/float-clock/main/assets/icon-512.png
 ```
 
-### 2. 跑起来
+### 2. Run it
 
-双击打开也行，命令行也行：
+Double-clicking works, and so does the command line:
 
 ```bash
-# 1. 生成配置
-float-clock --init-config
-
-# 2. 改 config.toml 里的 target / offset，然后跑起来
-float-clock
+float-clock --init-config          # write a default config, then exit
+float-clock                        # run with it
 ```
 
-命令行也能临时覆盖：
+Any setting can also be overridden for a single run:
 
 ```bash
 float-clock --target 2026-09-19T20:29:00 --offset +120m
 ```
 
-**配置文件放哪**（都找不到时会自动生成一份）：
+**Where the config file lives** (in this order, highest precedence first):
 
-1. `--config <路径>` 指定的
-2. 环境变量 `FLOAT_CLOCK_CONFIG`
-3. 当前目录下的 `config.toml`
-4. 用户配置目录 —— macOS `~/Library/Application Support/FloatClock/`，
-   Windows `%APPDATA%\FloatClock\`，Linux `~/.config/float-clock/`
+1. `--config <path>`
+2. `$FLOAT_CLOCK_CONFIG`
+3. `./config.toml` in the current directory
+4. the per-user location - macOS `~/Library/Application Support/FloatClock/config.toml`,
+   Windows `%APPDATA%\FloatClock\config.toml`,
+   Linux `~/.config/float-clock/config.toml` (or `$XDG_CONFIG_HOME`)
 
-双击打开时工作目录是 `/`，走的是第 4 条。所以「下载 → 双击 → 关掉 → 再打开」
-位置和设置都会记得。
+The app can always tell you which one it would use:
 
-### 交互
+```bash
+float-clock --config-path
+```
 
-| 操作 | 效果 |
+A double-click starts with `/` as the working directory, so it lands on rule 4. That is why "download → double-click → quit → reopen" remembers both the position and the settings.
+
+On the very first run there is no config file yet, so FloatClock writes one **and opens its settings window**, which displays the exact config path. Save the file and the running overlay picks the change up within about a second; there is no need to restart it.
+
+### Controls
+
+| Action | Effect |
 | --- | --- |
-| 左键拖动 | 移动浮窗（松开后坐标自动写回 `config.toml`） |
-| 右键 | 锁定 / 解锁 |
-| 双击 | 打开设置窗口 |
-| `Ctrl/⌘ + L` | 锁定 / 解锁 |
-| `Ctrl/⌘ + ,` | 设置 |
-| `Ctrl/⌘ + R` | 重载配置 |
-| `Ctrl/⌘ + Q` | 退出 |
+| drag with the left mouse button | move the overlay (the position is written back to `config.toml`) |
+| right-click | lock / unlock |
+| double-click | open the settings window |
+| `Cmd/Ctrl + L` | lock / unlock |
+| `Cmd/Ctrl + ,` | settings window |
+| `Cmd/Ctrl + R` | reload the config from disk |
+| `Cmd/Ctrl + H` | hide / show the overlay |
+| `Cmd/Ctrl + Q` | quit |
 
-锁定状态不用文字提示，看外框线：**实线 = 锁定**，**虚线 = 可拖动**。
+The locked state is not announced with text, it is drawn in the frame: **solid = locked**, **dashed = draggable**.
+
+### The tray icon
+
+macOS gets a menu-bar icon (an `NSStatusItem`) and Windows gets a notification-area icon (`Shell_NotifyIcon`). Both open the same menu:
+
+* Hide overlay / Show overlay
+* Locked (a checkbox)
+* Settings…
+* Open config file
+* Show config in folder
+* Reload config
+* Quit FloatClock
+
+**Linux has no tray icon in this build.** The only options there are XEmbed (X11-only, and dead on Wayland) or a D-Bus `StatusNotifierItem`, and both would drag a GTK3 or D-Bus runtime into a binary that currently links nothing but libc. On Linux, right-click, the keyboard shortcuts and the config file cover exactly the same ground.
 
 ---
 
-## T± 是什么意思
+## What T± means
 
-程序里有两个时刻：
+There are two moments in the program:
 
-* **目标时间点 `T`** —— 副标题倒计时指向它，过了之后显示已经过去多久
-* **偏移时刻 `M = T + offset`** —— 主标题倒计时指向它
+* **the target time `T`** - the subtitle counts down to it and, once it has passed, counts up from it
+* **the offset moment `M = T + offset`** - the main title counts down to it
 
-| 显示 | 含义 |
+| Display | Meaning |
 | --- | --- |
-| `T-00:05:00` | 距离该时刻还有 5 分 00 秒 |
-| `T+00:00:12` | 该时刻已经过去 12 秒 |
-| `T-00:00:00` | 正点（该时刻所在的这一秒） |
+| `T-00:05:00` | 5 minutes 00 seconds remain until that moment |
+| `T+00:00:12` | that moment passed 12 seconds ago |
+| `T-00:00:00` | on the dot (the very second that contains that moment) |
 
-所有字段都补 0 对齐；超过一天自动变成 `DD:HH:MM:SS`。
+Both lines flip from `T-` to `T+` on their own once they are in the past, and both fire system notifications on the way in. Every field is zero-padded so the digits line up, and once more than a day remains the clock grows to `DD:HH:MM:SS`.
 
-### 例子：20:29 泄露，紧急处理窗口期 120 分钟
+### Example: a leak at 20:29, with a 120-minute response window
 
 ```toml
 [time]
-target = "2026-09-19T20:29:00"   # 泄露发生的那一刻
-offset = "+120m"                  # 紧急处理窗口期 120 分钟
+target = "2026-09-19T20:29:00"   # the moment the leak happened
+offset = "+120m"                  # a 120-minute response window
 ```
 
-* 主标题 `T-…` 指向 **22:29**（窗口期截止）
-* 副标题 `T±` 指向 **20:29**（泄露时刻），过了 20:29 就翻成 `T+…` 显示已过多久
-* 第三行 `20:29:00 · +02:00:00` 把两个时刻一起摆出来
+* the main title `T-…` points at **22:29** (the end of the window)
+* the subtitle points at **20:29** (the leak itself) and flips to `T+…` once it passes
+* the third line `20:29:00 | +02:00:00` shows both moments at once
 
-想每天重复的日程直接用时间写法，已过会自动顺延到明天：
+For a schedule that repeats every day, use a bare time - once it has passed it rolls over to tomorrow:
 
 ```toml
 target = "20:29"
@@ -142,41 +166,42 @@ target = "20:29"
 
 ---
 
-## 配置
+## Configuration
 
-`config.toml` 改完保存即可，程序约 1 秒内自动重载，不用重启。
+Edit `config.toml` and save; the program reloads it within about a second, no restart needed.
 
 ```toml
 [window]
-x = 80               # 浮窗坐标（拖动后自动写回）
+x = 80                 # top-left corner (written back automatically after a drag)
 y = 80
-borderless = true    # 无边框
-topmost = true       # 永远置顶
-locked = false       # 锁定后不能拖
-opacity = 1.0
+borderless = true      # drop the title bar
+topmost = true         # keep the overlay above every other window
+locked = false         # while locked the overlay cannot be dragged
+opacity = 1.0          # whole-window opacity; usually stays at 1.0
+tray = true            # tray icon on macOS / Windows (ignored on Linux)
 
 [display]
-font_family = ""     # 留空自动挑系统等宽字体
-main_size = 46.0     # 主标题字号（pt）
+font_family = ""       # empty = auto-pick the system monospace font
+main_size = 46.0       # main title size (pt)
 sub_size = 18.0
-color = "#00FF66"    # 绿色
-sub_color = ""       # 留空 = 跟主标题同色
+color = "#00FF66"      # green
+sub_color = ""         # empty = same colour as the main title
 bold = true
-show_days = true     # 超过一天显示 DD:HH:MM:SS
-gap = 2              # 行间距（像素）
+show_days = true       # switch to DD:HH:MM:SS past a day
+gap = 2                # gap between the lines, in pixels
 
-info_template = "{time} · {delta}"   # 第三行，设置成 "" 就整行不显示
+info_template = "{time} | {delta}"   # third line; "" hides the whole line
 info_size = 14.0
-info_color = ""                      # 留空 = 跟主标题同色
-info_style = "auto"                  # auto/knockout = 绿底镂空；text = 普通绿字
-background = "#101010"               # 不支持透明的平台上用的底色
+info_color = ""                      # empty = same colour as the main title
+info_style = "auto"                  # auto / knockout = green bar with knocked-out glyphs; text = plain green text
+background = "#101010"               # backing colour on platforms without transparency
 
 interval_ms = 200
-lock_indicator = "border"            # border = 用外框线表示锁定；none = 不显示
-border_color = ""                    # 留空 = 跟文字同色
+lock_indicator = "border"            # border = draw the frame; none = draw nothing
+border_color = ""                    # empty = same colour as the text
 border_width = 2
-solid_when_locked = true             # true：锁定时实线、解锁时虚线
-max_scale = 2.0                      # 文字渲染倍率上限（Retina 自动跟随）
+solid_when_locked = true             # true: solid while locked, dashed while unlocked
+max_scale = 2.0                      # ceiling for the text rasterisation scale
 
 main_template = "T{sign}{clock}"
 sub_template = "T{sign}{clock}"
@@ -191,266 +216,269 @@ before = [3600, 1800, 900, 600, 300, 180, 120, 60, 30, 10, 5, 3, 2, 1]
 after = [1, 5, 30, 60, 300]
 at_moment = true
 sound = true
+sound_name = "Glass"                 # macOS alert sound
 title_template = "[T{sign}{clock}] {label}"
-body_before = "距离{label}还有 {human}"
-body_at = "{label}已到 · {time}"
-body_after = "{label}已过去 {human}"
+body_before = "{human} until {label}"
+body_at = "{label} reached at {time}"
+body_after = "{label} passed {human} ago"
 ```
 
-### 第三行的占位符
+`config.example.toml` documents every key, including the ones above.
 
-| 占位符 | 内容 |
+### Third-line placeholders
+
+| Placeholder | Content |
 | --- | --- |
-| `{date}` `{time}` `{datetime}` | 目标时间点 `T` |
-| `{mark}` `{mark_datetime}` | 偏移时刻 `M = T + offset` |
-| `{delta}` | 偏移的补零写法，如 `+02:00:00` |
-| `{delta_human}` | 偏移的中文写法，如 `+2 小时` |
+| `{date}` `{time}` `{datetime}` | the target moment `T` |
+| `{mark}` `{mark_datetime}` | the offset moment `M = T + offset` |
+| `{delta}` | the offset, zero-padded, e.g. `+02:00:00` |
+| `{delta_human}` | the offset in words, e.g. `+2 hours` |
 
-认不出的占位符会原样留在画面上。
+A placeholder the program does not recognise is left on screen verbatim.
 
-### 时间写法
+### Time formats
 
-`target` 支持：
+`target` accepts:
 
-```
+```text
 2026-09-19T20:29:00   2026-09-19 20:29   2026-09-19
 2026/09/19 20:29      2026.09.19 20:29   09-19 20:29
-20:29                 20:29:00           ← 今天该时刻，已过顺延到明天
-+1h30m                -10m               ← 相对现在
+20:29                 20:29:00           <- that time today, rolling to tomorrow once past
++1h30m                -10m               <- relative to now
 ```
 
-`offset` 支持：
+`offset` accepts:
 
-```
+```text
 0    -300    90s     5m     1h30m    1d2h
 00:05:00   5:00   -00:05:00   +120m
 ```
 
-### 通知文案
+### Notification wording
 
-通知里**不带 emoji**，装饰统一用 `[]` 这类括号。可用占位符：
+Notification bodies read `{human} until {label}`, `{label} reached at {time}` and `{label} passed {human} ago`; durations render as `45s`, `2m`, `1h 30m`, `1d 1h 1m`. Notifications carry **no emoji** - use brackets such as `[]` if you want decoration. Available placeholders:
 
-| 占位符 | 内容 |
+| Placeholder | Content |
 | --- | --- |
-| `{label}` | 时间点名称（`目标时间点` / `偏移时刻`） |
-| `{sign}` `{clock}` | `-`/`+` 与补零时长 |
-| `{human}` | 人话时长，如 `2 小时` |
-| `{time}` `{datetime}` | 该时刻 |
+| `{label}` | the name of the moment (`Target time` / `Offset moment`) |
+| `{sign}` `{clock}` | `-` / `+` and the zero-padded duration |
+| `{human}` | the duration in words, e.g. `2m` |
+| `{time}` `{datetime}` | that moment |
 
-通知的**图标由系统按「发送通知的程序」决定**，三个平台的后端都没有自定义图标的接口，
-这是系统限制，程序不做任何平台特有的绕行。
+The notification **icon is chosen by the system from the program that sent it**; none of the three backends offers a custom icon hook. That is a system limit, and the program does not add a platform-specific workaround for it.
 
 ---
 
-## 命令行
+## Command line
 
+```text
+float-clock [OPTIONS]
+
+--config <PATH>        use this config file (default: see --config-path)
+--config-path          print the config file that would be used, then exit
+--init-config          write a default config file, then exit
+--force                with --init-config, overwrite an existing file
+--target <WHEN>        override [time] target for this run
+--offset <DURATION>    override [time] offset for this run
+--settings             open the settings window on startup
+--print                print the current state and the upcoming reminders, then exit
+--render-png <PATH>    render the overlay to a PNG, then exit (no window)
+--scale <FACTOR>       with --render-png, the render scale (default 2)
+--now <WHEN>           with --print / --render-png / --diagnose, pretend it is this time
+--diagnose             print environment and render diagnostics, then exit
+--test-notify          send one test notification, then exit
+--no-transparent       force an opaque background (troubleshooting)
+--probe <SECONDS>      read the real pixels back from the GPU after N seconds, then print a report
+--probe-png <PATH>     with --probe, write the read-back pixels to this PNG
+-h, --help
+-V, --version
 ```
-float-clock [选项]
 
---config <路径>        指定配置文件（默认 ./config.toml）
---init-config          生成默认配置文件后退出
---force                配合 --init-config，覆盖已存在的文件
---target <时间点>      临时覆盖 [time] target
---offset <时长>        临时覆盖 [time] offset
---print                打印当前状态与接下来的提醒后退出（不开窗口）
---render-png <路径>    把浮窗渲染成 PNG 后退出（不开窗口）
---scale <倍数>         配合 --render-png，渲染倍率（默认 2）
---now <时间点>         配合 --print/--render-png/--diagnose，指定「现在」
---diagnose             打印环境与渲染诊断信息后退出
---test-notify          发一条测试通知后退出
---settings             启动时直接打开设置窗口
---no-transparent       强制不透明背景（排障用）
---probe <秒数>         窗口起来后从 GPU 回读真实像素并打印体检报告
---probe-png <路径>     配合 --probe，把回读到的像素写成 PNG
--h, --help / -V, --version
-```
+`--diagnose` also reports whether a tray icon is available on this platform.
 
-不开窗口就能自检：
+Self-checks that need no window:
 
 ```bash
-# 画面长什么样，直接出图
+# what the overlay looks like, straight to a PNG
 float-clock --target 2026-09-19T20:29:00 --offset +120m \
             --now 2026-09-19T20:00:00 --render-png /tmp/overlay.png
 
-# 状态、接下来的提醒
+# state and the upcoming reminders
 float-clock --print --now 2026-09-19T20:00:00
 
-# 字体、渲染尺寸、平台能力
+# fonts, render sizes, platform capabilities
 float-clock --diagnose
 
-# 窗口是不是真的透明（从 GPU 回读这一帧的真实像素）
+# is the window really transparent? (read the real pixels back from the GPU)
 float-clock --probe 2 --probe-png /tmp/window.png
 ```
 
 ---
 
-## 平台差异
+## Platform differences
 
 | | macOS | Windows | Linux |
 | --- | --- | --- | --- |
-| 无边框 + 置顶 | ✅ | ✅ | ✅ |
-| 真透明背景 | ✅ 窗口级 alpha | ✅ 窗口级 alpha | ✅ 需要合成器（compositor） |
-| 绿底镂空第三行 | ✅ | ✅ | ✅ |
-| 系统通知 | `osascript`（有 `terminal-notifier` 就用它） | PowerShell WinRT Toast | `notify-send` |
-| 双击启动时的控制台 | 无 | 自动隐藏（进程仍是控制台子系统，`--print` 之类的输出照常） | 取决于桌面环境 |
-| 默认等宽字体 | Menlo | Consolas | DejaVu Sans Mono |
-| 默认中文兜底字体 | PingFang SC | Microsoft YaHei | Noto Sans CJK SC |
-| 图标 | `FloatClock.app` 里的 `.icns` | 写进 exe 的资源段（含版本信息） | `assets/icon-512.png` |
+| borderless + always on top | yes | yes | yes |
+| transparent background | yes, window-level alpha | yes, window-level alpha | yes, needs a compositor |
+| tray icon | yes, `NSStatusItem` in the menu bar | yes, `Shell_NotifyIcon` in the notification area | **no** tray backend in this build |
+| dragging | native: `ViewportCommand::StartDrag`, with an automatic manual fallback | same | same (native drag may be unavailable on Wayland) |
+| notifications | `osascript` (`terminal-notifier` when installed) | PowerShell WinRT Toast | `notify-send` |
+| green-bar knockout third line | yes | yes | yes |
+| console box on a double-click launch | none | hidden automatically (the process stays a console-subsystem binary, so `--print` output still works) | depends on the desktop environment |
+| default monospace font | Menlo | Consolas | DejaVu Sans Mono |
+| icon | `.icns` inside `FloatClock.app` | resource section of the exe (with the version block) | `assets/icon-512.png` |
 
-不支持的机器上程序会退回 `background` 配置的实心底色——文字和倒计时照常工作，只是背后有个色块。
+On a machine that cannot do transparency the program falls back to the solid `background` colour: the text and the countdown work as usual, there is just a coloured block behind them.
 
-macOS 上还会顺手做两件事：关掉系统给透明窗口加的那圈阴影，并把应用设成
-`Accessory`（有窗口但不占 Dock 图标）。
+macOS also does two extra things: it turns off the shadow the system adds to a transparent window, and it sets the app to `Accessory` (windows but no Dock icon).
 
-Windows 上发通知时会带 `CREATE_NO_WINDOW` 启动 PowerShell，否则每弹一次通知都会闪一个黑框。
+On Windows, notifications launch PowerShell with `CREATE_NO_WINDOW`; without it every notification would flash a black console box.
 
-### 这些平台到底验到什么程度
+### Dragging: why it no longer jitters
 
-说清楚比较要紧：
+Dragging used to shake. The cause was a feedback loop: the code accumulated `pointer.delta()` - a *window-relative* pointer delta - and moved the window by it, but moving the window also shifts the pointer's window-relative position, so the window's own movement was fed back into the next frame's delta.
 
-| 平台 | 交叉编译 | 二进制格式 / 依赖检查 | 无窗口的命令行路径 | 真机开窗口 |
+Dragging is handed to the window manager through `ViewportCommand::StartDrag`. Our code never sees the movement, so there is no loop and no jitter. If the window manager does not take the drag over (X11 without focus, a compositor that refuses), the app notices within about 120 ms that the pointer is moving while the window is not, and falls back to moving the window itself from an **absolute anchor in monitor space** - which is immune to the same feedback, because the pointer's monitor-space position does not change when the window follows it.
+
+There is no setting for this: the probe decides per drag, and a mis-detection only affects the drag it happened in.
+
+### How far each platform is actually verified
+
+Saying this plainly seems more useful than a wall of checkmarks:
+
+| Platform | Cross-compiled | Format / dependency check | Windowless CLI paths | Real GUI window |
 | --- | --- | --- | --- | --- |
-| macOS arm64 | ✅ | ✅ | ✅ | ✅ 全流程（窗口透明、GPU 像素回读、通知、设置窗口、.app 双击） |
-| macOS x86_64 | ✅ | ✅ | ✅ 同一个通用二进制 | ⬜ 没有 Intel 机器 |
-| Linux x86_64 | ✅ | ✅ 最高只要求 glibc 2.28，动态依赖只有 libc/libm/libpthread/libdl | ✅ CI 里真跑了 `--print` / `--render-png` | ⬜ 没有 Linux 桌面 |
-| Windows x86_64 | ✅ | ✅ 仅依赖系统 DLL（无 mingw 运行时依赖） | ✅ CI 里真跑了 `--print` / `--render-png` | ⬜ 没有 Windows 桌面 |
+| macOS arm64 | yes | yes | yes | **yes**, end to end |
+| macOS x86_64 slice | yes | yes | yes, the same universal binary | no - no Intel machine available |
+| Linux x86_64 | yes | yes, glibc 2.28 floor, dynamic deps only `libc`/`libm`/`libpthread`/`libdl` | yes, on real CI runners | **no** |
+| Windows x86_64 | yes | yes, system DLLs only (no mingw runtime dependency) | yes, on real CI runners | **no** |
 
-「命令行路径」那列是 GitHub Actions 在真机（真 Windows / 真 Linux 容器）上跑的：
-`--version` / `--init-config` / `--print` / `--render-png` 都验证过。
-**没验证的只有窗口系统那一层**——透明、置顶、拖拽、字体名，这部分交给 `eframe`/`winit`。
+The macOS arm64 run covers the full pipeline, including a GPU framebuffer read-back (`--probe`, which reads the real pixels back with `glReadPixels`) and an `NSWindow` probe. The tray icon is confirmed to be created at runtime there.
 
-「长什么样」这件事本身也是平台无关的：整张浮窗图由 `render` 自己逐像素合成，
-`cargo test` 里已经逐像素对过，三个平台跑的是同一段代码。
+On Linux and Windows, `--version`, `--init-config`, `--print`, `--render-png` and `--diagnose` genuinely run on real CI runners, and the archives are unpacked and re-tested there. **No GUI window has ever been opened on Linux or Windows**: the window system layer - transparency, always on top, dragging, the tray - is delegated to `eframe`/`winit` and is unverified on those platforms.
+
+The test suite is font-metric independent (structural and text-content assertions only), which is why it passes on the Ubuntu CI image with only `fonts-dejavu-core` installed. "What it looks like" is platform independent by construction: the render layer composites the whole overlay pixel by pixel itself, and `cargo test` compares it pixel by pixel, so all three platforms run the same code.
 
 ---
 
-## 图标
+## Icons
 
 ![icon](assets/icon-512.png)
 
-近黑圆角方块 + 亮绿倒计时表盘，缺口留在右上角，中间是等宽的 `T−`（主标题的前缀）。
-和浮窗本身同一套配色（`#00FF66` / `#101010`）。
+A near-black rounded square with a bright green countdown dial, the gap in the upper right, and a monospace `T−` in the middle (the prefix of the main title). It uses the same palette as the overlay itself (`#00FF66` / `#101010`).
 
-图标是脚本画出来的，改完重新生成：
+The icons are drawn by a script:
 
 ```bash
-python3 tools/make_icons.py     # 需要 Pillow；在 macOS 上还会顺手出 .icns
+python3 tools/make_icons.py     # needs Pillow; also writes the .icns on macOS
 ```
 
-产物 `assets/icon.png` / `icon-512.png` / `icon.ico` / `icon.icns` 都直接进仓库，
-所以 `build.sh` 和 CI 不需要额外装东西。
+`assets/` holds `icon.png`, `icon-512.png`, `icon.ico`, `icon.icns`, `tray-macos.png` (a 44×44 black-and-alpha template image for the macOS menu bar) and `tray-windows.png` (64×64 colour, for the Windows notification area). All of them are generated by that script and committed, so neither `build.sh` nor CI needs Pillow.
 
 ---
 
-## 从源码构建
+## Building from source
 
-需要 Rust 1.80+（本项目在 1.98 上开发验证）。
+Rust 1.80+ is required (the project is developed and verified on 1.98).
 
 ```bash
-cargo build --release            # 本机平台
-cargo test                       # 单元测试
+cargo build --release            # host platform
+cargo test                       # unit tests
 ```
 
-### 交叉编译三平台单文件
+Note that `cargo` and `rustc` may live in `~/.cargo/bin` without being on `PATH`; `build.sh` exports it itself.
 
-`build.sh` 把三条链路都串好了：
+### Cross-compiling the three platforms
+
+`build.sh` strings all three chains together:
 
 ```bash
-./build.sh            # 默认出 macOS(通用 + .app) + Linux x86_64 + Windows x86_64
-./build.sh macos      # 只出某一个
+./build.sh            # macOS (universal + .app) + Linux x86_64 + Windows x86_64
+./build.sh macos      # just one of them
 ./build.sh linux windows
 ```
 
-产物在 `dist/`：
+Every artefact lands in `dist/`:
 
-| 文件 | 目标 | 说明 |
+| File | Target | Notes |
 | --- | --- | --- |
-| `float-clock-macos-universal` | `aarch64-apple-darwin` + `x86_64-apple-darwin` | `lipo` 合成的通用二进制 |
-| `float-clock-macos-universal.zip` | 同上 | 里面是 `FloatClock.app`，带图标、可执行位不丢 |
-| `float-clock-linux-x86_64[.tar.gz]` | `x86_64-unknown-linux-gnu` | 需要 `zig` + `cargo-zigbuild` |
-| `float-clock-windows-x86_64.exe` | `x86_64-pc-windows-gnu` | 需要 `mingw-w64`；图标由 `build.rs` 写进去 |
-| `SHA256SUMS` | | 上面所有文件的校验和 |
+| `float-clock-macos-universal.zip` | `aarch64-apple-darwin` + `x86_64-apple-darwin` | contains `FloatClock.app`, with the icon and the executable bit intact |
+| `float-clock-linux-x86_64.zip` | `x86_64-unknown-linux-gnu.2.28` | needs `zig` + `cargo-zigbuild` |
+| `float-clock-windows-x86_64.zip` | `x86_64-pc-windows-gnu` | needs `mingw-w64`; `build.rs` writes the icon and version block |
+| `SHA256SUMS` | | checksums of the archives above |
 
-
-准备工作：
+Preparation:
 
 ```bash
 rustup target add aarch64-apple-darwin x86_64-apple-darwin \
                   x86_64-unknown-linux-gnu x86_64-pc-windows-gnu
 
-# Linux：用 zig 当链接器，不用开虚拟机 / 容器
+# Linux: use zig as the linker, no VM or container needed
 brew install zig && cargo install cargo-zigbuild
 
-# Windows：mingw-w64
+# Windows: mingw-w64
 brew install mingw-w64
 ```
 
-Windows 也可以用 MSVC 工具链（`cargo install cargo-xwin` + `--target x86_64-pc-windows-msvc`），
-但那样要下整个 MSVC SDK，mingw 这条轻得多。
+The toolchain in short: macOS is native (arm64 + x86_64, joined with `lipo`); Linux goes through `zig` + `cargo-zigbuild` with a `x86_64-unknown-linux-gnu.2.28` glibc floor; Windows uses `x86_64-pc-windows-gnu` + `mingw-w64` locally and `x86_64-pc-windows-msvc` in CI.
 
 ---
 
-## 代码结构
+## Code structure
 
-分层的目的是**让画面本身能脱离窗口系统单独验证**：
+The layering exists so that **the picture itself can be verified without a window system**:
 
-| 模块 | 职责 | 能否纯单元测试 |
+| Module | Responsibility | Unit-testable on its own |
 | --- | --- | --- |
-| `timefmt` | 时间解析、T± 格式化 | ✅ |
-| `config` | TOML 读取 / 保留注释的回写 | ✅ |
-| `notifier` | 提醒排程、去重、不补发 | ✅ |
-| `notify` | 三平台系统通知（走系统自带命令） | ✅（编码部分） |
-| `pixmap` | RGBA 画布、覆盖混合、**擦除**（镂空靠它） | ✅ 逐像素 |
-| `text` | 字体查找、逐字排版、`ab_glyph` 栅格化 | ✅ 逐像素 |
-| `render` | 把三行合成一张 RGBA 图 | ✅ 逐像素 |
-| `app` | 窗口、输入、通知调度 | 需要真实窗口 |
-| `macos` | 窗口体检 / 阴影与 Dock 调整 | macOS 专用 |
-| `build.rs` | 给 Windows 的 exe 写图标和版本信息 | 构建期 |
+| `timefmt` | time parsing, T± formatting | yes |
+| `config` | TOML loading, comment-preserving write-back | yes |
+| `notifier` | reminder scheduling, de-duplication, never re-announcing | yes |
+| `notify` | system notifications on all three platforms (through the platform's own commands) | yes (the encoding parts) |
+| `pixmap` | RGBA canvas, source-over blending, **erase** (the knockout depends on it) | yes, pixel by pixel |
+| `text` | font lookup, glyph layout, `ab_glyph` rasterisation | yes, pixel by pixel |
+| `render` | composite the three lines into one RGBA image | yes, pixel by pixel |
+| `tray` | the menu-bar / notification-area icon and its menu | needs a real desktop |
+| `shell` | hand the config file to the desktop: open it, or reveal it in the file manager | needs a real desktop |
+| `app` | window, input, notification dispatch | needs a real window |
+| `macos` | window health check, shadow and Dock adjustments | macOS only |
+| `build.rs` | icon and version info for the Windows exe | build time |
 
-目录里还有几个不参与编译的东西：
+A few things in the tree are not compiled at all:
 
-| 路径 | 作用 |
+| Path | Purpose |
 | --- | --- |
-| `assets/` | 图标（`tools/make_icons.py` 生成，直接进仓库） |
-| `tools/make_icons.py` | 画图标 |
-| `tools/make_app.sh` | 把 macOS 二进制包成 `.app` |
-| `build.sh` | 一条命令出三平台产物 |
-| `config.example.toml` | 默认配置的样例 |
+| `assets/` | icons (generated by `tools/make_icons.py`, committed) |
+| `tools/make_icons.py` | draws the icons |
+| `tools/make_app.sh` | wraps a macOS binary into a `.app` |
+| `build.sh` | one command for all three platforms, zipped |
+| `QUICKSTART.txt` | the plain-text guide shipped inside every archive |
+| `config.example.toml` | a fully commented example config |
 
-`app` 只负责「把已经算好的那张图贴上去 + 收鼠标键盘」，
-所以「长什么样」这件事完全由前面几层决定，而它们都在 `cargo test` 里逐像素对过。
+`app` only paints an image that has already been computed and collects mouse and keyboard input, so "what it looks like" is decided entirely by the layers below it - and those are compared pixel by pixel in `cargo test`.
 
 ```bash
-cargo test        # 61 个测试
+cargo test        # 69 tests
 
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
 ```
 
-CI（[`ci.yml`](.github/workflows/ci.yml)）跑的就是上面这三条；
-[`release.yml`](.github/workflows/release.yml) 在打 `v*` 标签时把三平台产物编出来挂到 Release 上。
+CI ([`ci.yml`](.github/workflows/ci.yml)) runs exactly those three; [`release.yml`](.github/workflows/release.yml) builds the three platforms and attaches the archives to a Release whenever a `v*` tag is pushed.
 
 ---
 
-## 分支说明
+## Branches
 
-| 分支 | 内容 |
+| Branch | Contents |
 | --- | --- |
-| **`main`** | **Rust 版**（主力，跨平台单文件） |
-| [`python`](https://github.com/bananaxiao2333/float-clock/tree/python) | 最早用 uv + Tk 写的 Python 版（保留存档） |
+| **`main`** | **the Rust implementation** (the one this README describes) |
+| [`python`](https://github.com/bananaxiao2333/float-clock/tree/python) | the original uv + Tk implementation, kept for the record |
 
-两个分支是两套独立的实现，文件不重叠，各自 clone 下来都能单独跑。
-Python 版当初是为了验证「浮窗 + T± + 镂空 + 通知」这套交互可行，
-Rust 版是为了解决它的两个硬伤：需要装 Python 运行时，以及三平台观感不一致。
+The two branches are separate implementations with a completely disjoint file set, so each one clones and builds on its own.
 
-行为是对齐的：
+---
 
-* 三行结构、T± 语义、补零规则、模板占位符一致
-* 锁定状态的实线/虚线外框线一致
-* 通知阈值、去重、不补发启动前的提醒一致
-* 配置键名基本一致（`x11_background` → `background`，新增 `max_scale`）
+## Licence
 
-渲染方式不同：Python 版在 macOS 上要靠 Tk + 一个 Objective-C 叠层才能做出镂空效果，
-而且被 Tk 9.0 的透明回归坑过；Rust 版直接把整张图自己栅格化，
-三个平台走同一段代码，所以三边长得一模一样。
-
+MIT - see [LICENSE](LICENSE).

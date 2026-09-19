@@ -1,9 +1,9 @@
 [package]
 name = "float-clock"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.80"
-description = "无背景悬浮 T± 倒计时 / borderless floating countdown overlay"
+description = "Borderless, transparent, always-on-top T+/- countdown overlay for the desktop"
 license = "MIT"
 repository = "https://github.com/bananaxiao2333/float-clock"
 keywords = ["countdown", "overlay", "transparent", "egui", "desktop"]
@@ -23,11 +23,19 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 serde = { version = "1", features = ["derive"] }
 toml = "0.9"
 png = "0.18"
-# 排障用：从 GPU 回读真实渲染结果（--probe）
+# Diagnostics only: read the real pixels back out of the GPU (--probe)
 egui_glow = "0.36"
 glow = "0.17"
 
-# 只有 macOS 上用来给窗口做像素体检（--probe），其它平台完全不参与编译
+# Tray / menu-bar icon. macOS (NSStatusItem) and Windows (Shell_NotifyIcon) only.
+# Default features are deliberately off: `gtk` would pull in libappindicator and a
+# GTK3 runtime dependency, which costs us the dependency-free static Linux binary,
+# and `libxdo` is not needed either.
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+tray-icon = { version = "0.25", default-features = false }
+
+# macOS only: pixel health check of the real NSWindow (--probe).
+# Not compiled at all on any other platform.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = "0.3"
@@ -40,10 +48,10 @@ objc2-app-kit = { version = "0.3", features = [
     "NSWindow",
 ] }
 
-# Windows：把图标和版本信息写进 exe。
-# 只能放成普通 build-dependencies —— cargo 的 target 表对 build-dependencies
-# 是按**宿主**匹配的，从 macOS 交叉编译 windows 时 cfg(windows) 不成立，
-# 依赖会被整个跳过。真正的取舍在 build.rs 里用 TARGET 环境变量判断。
+# Windows: embeds the icon and the version block into the .exe.
+# This has to be a plain build-dependency: cargo matches the `[target.'cfg(...)'.build-dependencies]`
+# table against the *host*, so cross-compiling for Windows from macOS would silently drop it
+# (cfg(windows) is false for the host). The real decision is made in build.rs from the TARGET env var.
 [build-dependencies]
 winresource = "0.1"
 

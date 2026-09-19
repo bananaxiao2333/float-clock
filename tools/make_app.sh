@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
-# 把 macOS 的可执行文件包成一个 .app。
+# Wrap a macOS executable into a .app bundle.
 #
-# 为什么非包不可：GitHub Releases 下载下来的是「裸二进制」，可执行位会丢，
-# Finder 于是把它当成文本文件丢给「文本编辑」，报一句
-#   「无法打开文件，文字编码 Unicode (UTF-8) 不适用」
-# 打成 .app 再 zip 起来就不会有这个问题：解压后双击就能开，图标也在。
+# Why a bundle is not optional: what a browser downloads from GitHub Releases is
+# a bare binary, and the executable bit does not survive the round trip. Finder
+# then treats a Mach-O file as text and hands it to TextEdit, which reports
+#   "the file could not be opened. The text encoding Unicode (UTF-8) is not
+#    applicable."
+# Inside a .app, inside a zip, none of that happens: unpack, double-click, done,
+# and the icon is there too.
 #
-# 用法:
-#   tools/make_app.sh <可执行文件> <版本号> <输出目录>
+# Usage:
+#   tools/make_app.sh <executable> <version> <output-dir>
 #
-# 产物: <输出目录>/FloatClock.app
+# Produces: <output-dir>/FloatClock.app
 set -euo pipefail
 
-BIN="${1:?用法: tools/make_app.sh <可执行文件> <版本号> <输出目录>}"
-VERSION="${2:?缺少版本号}"
-OUT_DIR="${3:?缺少输出目录}"
+BIN="${1:?usage: tools/make_app.sh <executable> <version> <output-dir>}"
+VERSION="${2:?missing version}"
+OUT_DIR="${3:?missing output directory}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# 允许传相对路径，也允许只传一个文件名
+# Accept a relative path, or just a bare file name
 BIN_DIR="$(dirname "$BIN")"
 BIN_PATH="$(cd "$BIN_DIR" && pwd)/$(basename "$BIN")"
 APP="$OUT_DIR/FloatClock.app"
@@ -48,7 +51,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key>              <string>${VERSION}</string>
     <key>LSMinimumSystemVersion</key>       <string>10.15</string>
     <key>NSHighResolutionCapable</key>      <true/>
-    <!-- 有窗口但不占 Dock 图标，本来在代码里设了 Accessory，这里双保险 -->
+    <!-- May own windows but takes no Dock icon; the code sets the
+         Accessory activation policy too, this is belt and braces -->
     <key>LSUIElement</key>                  <true/>
 </dict>
 </plist>
@@ -56,7 +60,8 @@ PLIST
 
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
-# 顺手做一次 ad-hoc 签名：没做的话 Apple Silicon 上可能因为「签名无效」直接被杀
+# Ad-hoc sign it while we are here: without any signature at all,
+# Apple Silicon may kill the process for having an invalid one
 if command -v codesign >/dev/null 2>&1; then
     codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 fi

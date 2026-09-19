@@ -1,98 +1,121 @@
-# FloatClock 悬浮倒计时配置
-# 改完保存即可，程序约 1 秒内自动重载（无需重启）。
-# 命令行 --target / --offset 可临时覆盖本文件。
+# FloatClock overlay countdown - configuration
+#
+# Save this file and the running overlay picks the change up within about a
+# second; there is no need to restart it.
+#
+# Precedence: --config <path>  >  $FLOAT_CLOCK_CONFIG  >  ./config.toml  >  this file.
+# The command-line flags --target / --offset override this file for one run.
+#
+# Every key below is optional: delete a line and the built-in default comes back.
 
 [window]
-# 浮窗左上角坐标（拖动后会自动写回这里）
+# Top-left corner of the overlay. Written back here automatically after a drag.
 x = 80
 y = 80
-# 去掉标题栏，配合透明背景实现「只有文字」的悬浮效果
+# Drop the title bar, so that combined with the transparent background the
+# window really is "just the text".
 borderless = true
-# 永远置顶
+# Keep the overlay above every other window.
 topmost = true
-# 锁定后不能拖动（右键随时切换；锁定状态也会写回这里）
+# While locked the overlay cannot be dragged. Toggle with the right mouse button
+# (or the tray menu, or Cmd/Ctrl+L); the state is written back here.
 locked = false
-# 整体不透明度 0.05~1.0（透明背景已够用，一般保持 1.0）
+# Whole-window opacity, 0.05 .. 1.0. The transparent background is usually
+# enough, so this normally stays at 1.0.
 opacity = 1.0
+# Show a tray icon (macOS menu bar / Windows notification area) with a menu for
+# show-hide, lock, settings, opening this file, reloading and quitting.
+# Linux has no tray backend in this build; the setting is ignored there.
+tray = true
 
 [display]
-# 等宽字体；留空自动挑选系统等宽字体（Menlo / Consolas / DejaVu Sans Mono ...）
+# Monospace font family. Leave empty to auto-pick the system monospace font
+# (Menlo / SF Mono / Consolas / DejaVu Sans Mono / Liberation Mono ...).
 font_family = ""
-# 主标题（距离偏移还有多久）字号，单位 pt
+# Size of the main title (time left until the offset moment), in points.
 main_size = 46.0
-# 副标题（距离目标时间点过去了多久）字号
+# Size of the subtitle (time elapsed since the target moment).
 sub_size = 18.0
-# 绿色粗体
+# Bold green.
 color = "#00FF66"
-# 副标题颜色，留空表示跟主标题一致
+# Subtitle colour; empty means "same as the main colour".
 sub_color = ""
 bold = true
-# 超过一天时显示 DD:HH:MM:SS（所有位都补 0 对齐）
+# Show DD:HH:MM:SS once the remaining time passes a day, zero-padded so every
+# digit column lines up.
 show_days = true
-# 主副标题之间的间距（像素）
+# Gap between the title and the subtitle, in pixels.
 gap = 2
-# 第三行：目标时间点 + 偏移（绿底镂空字）。设成空字符串 "" 则整行不显示。
-# 可用占位符：
-#   {date} {time} {datetime}     目标时间点 T
-#   {mark} {mark_datetime}       偏移时刻 M = T + offset
-#   {delta}                      偏移的补零写法，如 +02:00:00
-#   {delta_human}                偏移的中文写法，如 +2 小时
-info_template = "{time} · {delta}"
-# 第三行字号
+# Third line: the target moment plus the offset, drawn as green text knocked out
+# of a solid green bar. Set it to "" to hide the line entirely.
+# Placeholders:
+#   {date} {time} {datetime}     the target moment T
+#   {mark} {mark_datetime}       the offset moment M = T + offset
+#   {delta}                      the offset, zero-padded, e.g. +02:00:00
+#   {delta_human}                the offset in words, e.g. +2 hours
+info_template = "{time} | {delta}"
+# Size of the third line.
 info_size = 14.0
-# 第三行颜色，留空 = 跟主标题一致（绿色）
+# Third line colour; empty means "same as the main colour" (green).
 info_color = ""
-# 第三行样式：
-#   "auto"     = 强制镂空（绿块 + 抠掉字），拿不到字体时退回普通绿字
-#   "knockout" = 同上
-#   "text"     = 普通绿字、透明底
+# Third line style:
+#   "auto"     = knockout when possible (green bar, glyphs punched out), and
+#                plain green text when no usable font is available
+#   "knockout" = force the knockout
+#   "text"     = plain green text on a transparent background
 info_style = "auto"
-# 不支持透明背景的平台（老 X11）上用的底色
+# Backing colour used on platforms that cannot do per-pixel transparency (old X11).
 background = "#101010"
-# 刷新间隔（毫秒）
+# Refresh interval, in milliseconds.
 interval_ms = 200
-# 锁定状态指示：border = 用外框线表示（实线=锁定，虚线=可拖动），none = 不显示
+# Lock indicator: "border" draws a frame (solid = locked, dashed = draggable),
+# "none" draws nothing.
 lock_indicator = "border"
-# 外框线颜色，留空 = 跟文字同色
+# Frame colour; empty means "same as the text".
 border_color = ""
-# 外框线宽（像素）
+# Frame width, in pixels.
 border_width = 2
-# true：锁定时实线、解锁时虚线；false 反过来
+# true: solid while locked and dashed while unlocked; false swaps the two.
 solid_when_locked = true
-# 文字渲染倍率上限（Retina / HiDPI 上自动跟随显示器缩放，此项只是上限）
+# Ceiling for the text rasterisation scale. Retina / HiDPI displays are followed
+# automatically; this only caps how far that can go.
 max_scale = 2.0
-# 显示模板：{sign} 就是 + / -，{clock} 是补零时间
+# Display templates. {sign} is + or -, {clock} is the zero-padded time.
 main_template = "T{sign}{clock}"
 sub_template = "T{sign}{clock}"
 
 [time]
-# 目标时间点。支持：
+# The target moment. Accepted forms:
 #   2026-01-01T09:30:00   2026-01-01 09:30   2026-01-01
-#   09:30:00（今天该时刻，已过则自动顺延到明天 —— 每天重复的日程用这种写法）
-#   +1h30m（相对现在）
-# 绝对时间点过去之后，显示会自然翻转成 T+…
-target = "2026-09-19T23:00:00"
-# 偏移。主标题倒计时指向的时刻 = 目标时间点 + 偏移。
-# 支持 -00:05:00 / 5:00 / 1h30m / -300 / 0 等写法
+#   09:30:00   (that time today, rolling over to tomorrow once it has passed -
+#               use this for a daily recurring schedule)
+#   +1h30m     (relative to now)
+# Once an absolute moment is in the past the display flips to T+ on its own.
+target = "2026-09-19T20:29:00"
+# The offset. The main countdown points at  target + offset.
+# Accepts -00:05:00 / 5:00 / 1h30m / -300 / 0 and friends.
 offset = "-00:05:00"
 
 [notify]
-# 总开关
+# Master switch.
 enabled = true
-# 在每个时间点【之前】这些秒数各提醒一次
+# Fire a notification this many seconds BEFORE each moment.
 before = [3600, 1800, 900, 600, 300, 180, 120, 60, 30, 10, 5, 3, 2, 1]
-# 在每个时间点【之后】这些秒数各提醒一次
+# Fire a notification this many seconds AFTER each moment.
 after = [1, 5, 30, 60, 300]
-# 正点提醒
+# Notify exactly on the moment itself.
 at_moment = true
-# 通知声音
+# Play a sound.
 sound = true
-# macOS 提示音：Glass / Ping / Pop / Funk / Basso / Blow / Bottle / Frog / Hero / Morse / Purr / Sosumi / Submarine / Tink
+# macOS alert sound: Glass / Ping / Pop / Funk / Basso / Blow / Bottle / Frog /
+# Hero / Morse / Purr / Sosumi / Submarine / Tink
 sound_name = "Glass"
-# 通知文案模板（纯文本，不带 emoji，用 [] 这类符号做装饰）。占位符：
-#   {label} 时间点名称   {sign} - 或 +   {clock} 补零时间   {human} 人话时长
-#   {time} 该时刻 HH:MM:SS   {datetime} 该时刻完整时间
+# Notification templates (plain text, no emoji - use [ ] and friends if you want
+# decoration). Placeholders:
+#   {label}    name of the moment      {sign}     - or +
+#   {clock}    zero-padded time        {human}    duration in words ("2m")
+#   {time}     that moment as HH:MM:SS {datetime} that moment in full
 title_template = "[T{sign}{clock}] {label}"
-body_before = "距离{label}还有 {human}"
-body_at = "{label}已到 · {time}"
-body_after = "{label}已过去 {human}"
+body_before = "{human} until {label}"
+body_at = "{label} reached at {time}"
+body_after = "{label} passed {human} ago"

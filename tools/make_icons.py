@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
-"""生成 FloatClock 的图标（PNG / ICNS / ICO）。
+"""Generate the FloatClock artwork (PNG / ICNS / ICO plus the two tray icons).
 
-设计上刻意和浮窗本身对齐：近黑的圆角方块 + 亮绿(#00FF66)的倒计时表盘。
-表盘缺口留在右上角，暗示「正在倒数」；中间是等宽的 `T−`，也就是主标题的前缀。
+The design is deliberately the same language as the overlay itself: a near-black
+rounded square with a bright green (#00FF66) countdown dial. The dial has its
+notch at the top right, as if it were still counting down, and the monospace
+`T-` in the middle is the prefix the main title starts with.
 
-用法（需要 Pillow）：
+Usage (needs Pillow):
 
     python3 tools/make_icons.py
 
-产物都落在 assets/ 下：
+Everything lands in assets/:
 
-    icon.png      1024×1024，Linux / 文档用
-    icon.ico      Windows 多尺寸
-    icon.icns     macOS（只有 macOS 上能生成，靠系统的 iconutil）
+    icon.png         1024x1024, for Linux and documentation
+    icon-512.png     512x512, for the README
+    icon.ico         multi-resolution, for Windows
+    icon.icns        for macOS (only produced on macOS, via the system iconutil)
+    tray-macos.png   44x44 template image (black + alpha) for the menu bar
+    tray-windows.png 64x64 colour icon for the notification area
 """
 
 from __future__ import annotations
 
+import math
 import shutil
 import subprocess
 import sys
@@ -24,12 +30,12 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-# 和 [display] color 一致
+# Matches [display] color
 GREEN = (0, 255, 102, 255)
-# 和 [display] background 一致，稍微偏绿一点点
+# Matches [display] background, nudged very slightly green
 DARK = (13, 16, 13, 255)
 CANVAS = 1024
-# macOS Big Sur 之后的图标栅格：内容占 824×824，居中留白
+# Apple's post-Big-Sur icon grid: content occupies 824x824, centred
 MARGIN = 100
 RADIUS = 186
 
@@ -64,8 +70,27 @@ def rounded_mask(size: int, margin: int, radius: int) -> Image.Image:
     return mask
 
 
+def draw_glyph(
+    draw: ImageDraw.ImageDraw,
+    center: float,
+    size: int,
+    colour: tuple[int, int, int, int],
+    text: str = "T\u2212",
+) -> None:
+    """Draw the monospace `T-` mark centred on `center`."""
+    font = load_mono(size)
+    left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+    draw.text(
+        (center - (right - left) / 2 - left, center - (bottom - top) / 2 - top),
+        text,
+        font=font,
+        fill=colour,
+    )
+
+
 def draw_icon(size: int = CANVAS) -> Image.Image:
-    # 先在 4× 上画再缩回来，抗锯齿才干净（PIL 的超采样老办法）
+    # Draw at 4x and scale back down, the usual PIL supersampling trick, so the
+    # antialiasing comes out clean.
     ss = 4
     big = size * ss
     margin = MARGIN * ss
@@ -74,13 +99,13 @@ def draw_icon(size: int = CANVAS) -> Image.Image:
     image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
 
-    # 底座：近黑圆角方块
+    # Base plate: near-black rounded square
     draw.rounded_rectangle(
         (margin, margin, big - margin - 1, big - margin - 1),
         radius=radius,
         fill=DARK,
     )
-    # 内描边，让方块从深色壁纸上也能看出边界
+    # Inner hairline so the plate still reads against a dark wallpaper
     stroke = max(1, int(2.5 * ss))
     draw.rounded_rectangle(
         (margin, margin, big - margin - 1, big - margin - 1),
@@ -89,16 +114,14 @@ def draw_icon(size: int = CANVAS) -> Image.Image:
         width=stroke,
     )
 
-    # 表盘：留 1/4 缺口在右上，暗示还在倒数
+    # Dial: a quarter of it is missing at the top right, as if still counting
     center = big / 2
     ring_r = 268 * ss
     ring_w = 58 * ss
     box = (center - ring_r, center - ring_r, center + ring_r, center + ring_r)
     draw.arc(box, start=-58, end=270, fill=GREEN, width=ring_w)
 
-    # 缺口两端各点一个圆头，边缘才不秃
-    import math
-
+    # Round caps on both ends of the arc, otherwise the cut looks blunt
     for angle in (-58, 270):
         x = center + ring_r * math.cos(math.radians(angle))
         y = center + ring_r * math.sin(math.radians(angle))
@@ -107,27 +130,77 @@ def draw_icon(size: int = CANVAS) -> Image.Image:
             fill=GREEN,
         )
 
-    # 中间的 `T−`：主标题的前缀，等宽粗体
-    font = load_mono(int(300 * ss))
-    text = "T−"
-    left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
-    draw.text(
-        (center - (right - left) / 2 - left, center - (bottom - top) / 2 - top),
-        text,
-        font=font,
-        fill=GREEN,
-    )
+    draw_glyph(draw, center, int(300 * ss), GREEN)
 
     image = image.resize((size, size), Image.LANCZOS)
     image.putalpha(rounded_mask(size, MARGIN, RADIUS))
     return image
 
 
+def draw_tray_macos() -> Image.Image:
+    """44x44 (22pt @2x) macOS status-bar template image.
+
+    A template image must be black plus an alpha channel; AppKit inverts and
+    tints it automatically for light and dark menu bars. That is also why there
+    is no ring here - at 22pt the dial would collapse into a smudge, so the mark
+    is just the `T-` glyph, sized to the ~18pt cap height AppKit expects.
+    """
+    size = 44
+    ss = 8
+    big = size * ss
+    image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw_glyph(draw, big / 2, int(big * 0.62), (0, 0, 0, 255))
+    image = image.resize((size, size), Image.LANCZOS)
+    return fit_to_canvas(image, size, pad_ratio=0.06)
+
+
+def draw_tray_windows() -> Image.Image:
+    """64x64 colour icon for the Windows notification area.
+
+    Simplified on purpose: the dial is dropped, because at the 16px the tray
+    actually renders, a ring plus a glyph turns into mush.
+    """
+    size = 64
+    ss = 8
+    big = size * ss
+    image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    margin = int(big * 0.04)
+    draw.rounded_rectangle(
+        (margin, margin, big - margin - 1, big - margin - 1),
+        radius=int(big * 0.22),
+        fill=DARK,
+    )
+    draw_glyph(draw, big / 2, int(big * 0.62), GREEN)
+    image = image.resize((size, size), Image.LANCZOS)
+    image.putalpha(rounded_mask(size, int(size * 0.04), int(size * 0.22)))
+    return image
+
+
+def fit_to_canvas(image: Image.Image, size: int, pad_ratio: float) -> Image.Image:
+    """Trim transparent margins, then re-centre inside a square with padding."""
+    bbox = image.getbbox()
+    if bbox is None:
+        return image
+    cropped = image.crop(bbox)
+    inner = int(size * (1 - 2 * pad_ratio))
+    scale = min(inner / cropped.width, inner / cropped.height)
+    resized = cropped.resize(
+        (max(1, round(cropped.width * scale)), max(1, round(cropped.height * scale))),
+        Image.LANCZOS,
+    )
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    canvas.paste(
+        resized,
+        ((size - resized.width) // 2, (size - resized.height) // 2),
+    )
+    return canvas
+
+
 def write_ico(image: Image.Image, path: Path) -> None:
     sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
-    image.resize((256, 256), Image.LANCZOS).save(
-        path, format="ICO", sizes=sizes
-    )
+    image.resize((256, 256), Image.LANCZOS).save(path, format="ICO", sizes=sizes)
 
 
 def write_icns(image: Image.Image, path: Path, tmp: Path) -> bool:
@@ -162,18 +235,24 @@ def main() -> int:
 
     image = draw_icon()
     image.save(assets / "icon.png")
-    print(f"  → {assets / 'icon.png'}")
+    print(f"  -> {assets / 'icon.png'}")
 
     image.resize((512, 512), Image.LANCZOS).save(assets / "icon-512.png")
-    print(f"  → {assets / 'icon-512.png'}")
+    print(f"  -> {assets / 'icon-512.png'}")
 
     write_ico(image, assets / "icon.ico")
-    print(f"  → {assets / 'icon.ico'}")
+    print(f"  -> {assets / 'icon.ico'}")
 
     if write_icns(image, assets / "icon.icns", tmp):
-        print(f"  → {assets / 'icon.icns'}")
+        print(f"  -> {assets / 'icon.icns'}")
     else:
-        print("  （这台机器没有 iconutil，跳过 .icns）", file=sys.stderr)
+        print("  (no iconutil on this machine, skipping .icns)", file=sys.stderr)
+
+    draw_tray_macos().save(assets / "tray-macos.png")
+    print(f"  -> {assets / 'tray-macos.png'}")
+
+    draw_tray_windows().save(assets / "tray-windows.png")
+    print(f"  -> {assets / 'tray-windows.png'}")
     return 0
 
 

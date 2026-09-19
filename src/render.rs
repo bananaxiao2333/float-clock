@@ -1,6 +1,7 @@
-//! 把三行内容合成一张 RGBA 图。
+//! Composite the three lines of content into a single RGBA image.
 //!
-//! 这一层完全不碰窗口系统，所以「长什么样」可以在单元测试里逐像素验证。
+//! This layer never touches the window system, so "what it looks like" can be
+//! verified pixel by pixel in unit tests.
 
 use chrono::NaiveDateTime;
 
@@ -9,7 +10,7 @@ use crate::pixmap::{Color, Pixmap};
 use crate::text::{Fonts, GlyphRun, Ink};
 use crate::timefmt::{format_hms, render_info, split_delta};
 
-/// 一行内容画完之后的落位信息（逻辑像素）。
+/// Where a line of content lands after it has been drawn (logical pixels).
 #[derive(Debug, Clone, PartialEq)]
 pub struct LineInfo {
     pub text: String,
@@ -54,13 +55,14 @@ pub struct RenderInput<'a> {
     pub mark: NaiveDateTime,
     pub now: NaiveDateTime,
     pub locked: bool,
-    /// 物理像素 / 逻辑点
+    /// Physical pixels per logical point
     pub scale: f32,
-    /// 平台是否支持真透明；不支持时铺一层 config.display.background
+    /// Whether the platform supports true transparency; when it does not, a
+    /// layer of config.display.background is painted underneath
     pub transparent: bool,
 }
 
-/// 主 / 副标题的 `{sign}` `{clock}` 填充。
+/// `{sign}` / `{clock}` interpolation for the main and sub titles.
 pub fn compose(template: &str, sign: char, clock: &str) -> String {
     template
         .replace("{sign}", &sign.to_string())
@@ -137,7 +139,7 @@ pub fn render(input: &RenderInput<'_>) -> Result<Overlay, String> {
         });
     }
 
-    // 第三行为空时彻底不占高度
+    // An empty third line must take up no height at all
     if prepared[2].text.trim().is_empty() {
         prepared.pop();
     }
@@ -173,9 +175,11 @@ pub fn render(input: &RenderInput<'_>) -> Result<Overlay, String> {
         let x = inset + (content_width - line.run.width) / 2.0;
         let baseline = cursor + line.ascent;
         if line.knockout {
-            // 绿块 + 镂空：块的范围取「排版框」与「墨迹范围」的并集，
-            // 免得字形伸出行框后留下一截没有抠掉的残留。
-            // 注意 ink_bounds 的 y 是相对**基线**的，要加回 baseline。
+            // Green block + knockout: the block spans the union of the layout
+            // box and the ink bounds, so a glyph reaching outside its line box
+            // does not leave a strip of residue that never got erased.
+            // Note that the y of ink_bounds is relative to the **baseline**, so
+            // baseline has to be added back in.
             let ink = input.fonts.ink_bounds(&line.run, line.size * scale);
             let (ink_left, ink_top, ink_right, ink_bottom) = match ink {
                 Some((bx, by, bw, bh)) => (bx, baseline + by, bx + bw, baseline + by + bh),
@@ -303,21 +307,22 @@ mod tests {
     #[test]
     fn overlay_is_transparent_outside_the_text() {
         let mut config = Config::default();
-        // 边框本来就贴着窗口边缘，先关掉再检查「文字以外是否透明」
+        // The border already sits flush against the window edge, so turn it off
+        // first before checking "is everything outside the text transparent"
         config.display.lock_indicator = "none".into();
         let overlay = scenario(&config, dt(20, 0, 0), false);
         assert!(overlay.width() > 10 && overlay.height() > 10);
         assert_eq!(
             overlay.pixmap.get(overlay.width() - 1, 0),
             [0, 0, 0, 0],
-            "右上角应该是全透明的"
+            "the top-right corner should be fully transparent"
         );
         assert_eq!(overlay.pixmap.get(0, overlay.height() - 1), [0, 0, 0, 0]);
         let transparent = count(&overlay.pixmap, |pixel| pixel[3] == 0);
         let total = (overlay.width() * overlay.height()) as usize;
         assert!(
             transparent * 2 > total,
-            "文字以外大部分区域都该是透明的：{transparent}/{total}"
+            "most of the area outside the text should be transparent: {transparent}/{total}"
         );
     }
 
@@ -325,12 +330,12 @@ mod tests {
     fn main_title_shows_the_offset_countdown() {
         let config = Config::default();
         let overlay = scenario(&config, dt(20, 0, 0), false);
-        // 偏移时刻 22:29，现在 20:00 → 还有 2:29:00
+        // Mark 22:29, now 20:00 -> 2:29:00 to go
         assert_eq!(overlay.layout.lines[0].text, "T-02:29:00");
-        // 目标时间点 20:29，现在 20:00 → 还有 29:00
+        // Target 20:29, now 20:00 -> 29:00 to go
         assert_eq!(overlay.layout.lines[1].text, "T-00:29:00");
-        // 第三行：目标时间点 + 偏移
-        assert_eq!(overlay.layout.lines[2].text, "20:29:00 · +02:00:00");
+        // Third line: target + offset
+        assert_eq!(overlay.layout.lines[2].text, "20:29:00 | +02:00:00");
     }
 
     #[test]
@@ -356,11 +361,18 @@ mod tests {
         assert!(overlay.layout.lines[2].knockout);
         let green = count(&overlay.pixmap, is_green);
         let holes = count(&overlay.pixmap, |pixel| pixel[3] == 0);
-        assert!(green > 200, "应该有绿色块，实际 {green} 像素");
-        assert!(holes > 200, "镂空应该抠掉大量像素，实际 {holes}");
+        assert!(
+            green > 200,
+            "there should be a green block, got {green} pixels"
+        );
+        assert!(
+            holes > 200,
+            "the knockout should erase many pixels, got {holes}"
+        );
     }
 
-    /// 一行里最长的「实心色」横条长度：只有第三行的绿块会出现很长的连续实心像素。
+    /// The longest run of "solid color" within one row: only the green block of
+    /// the third line produces very long stretches of consecutive opaque pixels.
     fn longest_opaque_run(pixmap: &Pixmap, y: u32) -> u32 {
         let mut best = 0;
         let mut current = 0;
@@ -382,12 +394,12 @@ mod tests {
         let info_top = overlay.layout.lines[2].top.floor() as u32;
         let block_top = (0..overlay.height())
             .find(|y| longest_opaque_run(&overlay.pixmap, *y) >= 40)
-            .expect("应该能找到第三行的绿块");
+            .expect("should find the green block of the third line");
         assert!(
             block_top >= info_top.saturating_sub(1),
-            "绿块顶边({block_top})不该跑到第三行行顶({info_top})上面去"
+            "the top of the green block ({block_top}) must not creep above the top of the third line ({info_top})"
         );
-        // 而且绿块得压住第三行自己的高度
+        // And the green block has to cover the height of the third line itself
         assert!((block_top as f32) <= info_top as f32 + 2.0);
     }
 
@@ -422,23 +434,35 @@ mod tests {
     fn locked_draws_a_solid_border() {
         let config = Config::default();
         let overlay = scenario(&config, dt(20, 0, 0), true);
-        assert!(!overlay.layout.border_dashed, "锁定时应该是实线");
+        assert!(
+            !overlay.layout.border_dashed,
+            "it should be solid while locked"
+        );
         let top: Vec<u8> = (0..overlay.width())
             .map(|x| overlay.pixmap.get(x, 0)[3])
             .collect();
-        assert!(top.iter().all(|alpha| *alpha > 200), "实线边框不该有缺口");
+        assert!(
+            top.iter().all(|alpha| *alpha > 200),
+            "a solid border has no gaps"
+        );
     }
 
     #[test]
     fn unlocked_draws_a_dashed_border() {
         let config = Config::default();
         let overlay = scenario(&config, dt(20, 0, 0), false);
-        assert!(overlay.layout.border_dashed, "解锁时应该是虚线");
+        assert!(
+            overlay.layout.border_dashed,
+            "it should be dashed while unlocked"
+        );
         let top: Vec<u8> = (0..overlay.width())
             .map(|x| overlay.pixmap.get(x, 0)[3])
             .collect();
-        assert!(top.contains(&0), "虚线必须有缺口");
-        assert!(top.iter().any(|alpha| *alpha > 200), "虚线也要有实线段");
+        assert!(top.contains(&0), "a dashed border must have gaps");
+        assert!(
+            top.iter().any(|alpha| *alpha > 200),
+            "dashes need solid parts too"
+        );
     }
 
     #[test]
@@ -449,7 +473,10 @@ mod tests {
         let top: Vec<u8> = (0..overlay.width())
             .map(|x| overlay.pixmap.get(x, 0)[3])
             .collect();
-        assert!(top.iter().all(|alpha| *alpha == 0), "不该有边框");
+        assert!(
+            top.iter().all(|alpha| *alpha == 0),
+            "there should be no border"
+        );
     }
 
     #[test]
@@ -506,7 +533,7 @@ mod tests {
     #[test]
     fn bad_color_is_reported() {
         let mut config = Config::default();
-        config.display.color = "不是颜色".into();
+        config.display.color = "not a color".into();
         let fonts = Fonts::load("").unwrap();
         let result = render(&RenderInput {
             config: &config,

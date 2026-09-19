@@ -1,18 +1,21 @@
-//! 跨平台系统通知（零依赖，全部走系统自带命令）。
+//! Cross-platform system notifications (zero dependencies, everything goes through
+//! the commands the OS already ships).
 //!
-//! 通知图标由系统按「发送通知的程序」决定，三个后端都不提供自定义图标的接口，
-//! 所以这里不做任何平台特有的图标处理。
+//! The notification icon is decided by the system based on the program that sends
+//! the notification; none of the three backends exposes an API for a custom icon,
+//! so no platform-specific icon handling happens here.
 
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-/// 当前平台实际会用的通知后端，供 `--diagnose` / `--test-notify` 显示。
+/// The notification backend actually used on this platform, shown by
+/// `--diagnose` / `--test-notify`.
 pub fn backend() -> &'static str {
     if cfg!(target_os = "macos") {
         if which("terminal-notifier").is_some() {
             "terminal-notifier"
         } else {
-            "osascript（系统会把发送者认成「脚本编辑器」）"
+            "osascript (the system credits \"Script Editor\" as the sender)"
         }
     } else if cfg!(target_os = "windows") {
         "PowerShell WinRT Toast"
@@ -39,7 +42,8 @@ fn which(name: &str) -> Option<String> {
     None
 }
 
-/// Windows 上 `CREATE_NO_WINDOW`：否则每次发通知都会闪一个 PowerShell 黑框。
+/// `CREATE_NO_WINDOW` on Windows: without it a black PowerShell console flashes
+/// up on every notification.
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -56,7 +60,7 @@ fn quiet(command: &mut Command) -> bool {
         .spawn();
     match child {
         Ok(mut child) => {
-            // 给它一点时间自己退出，避免堆积僵尸进程
+            // give it a moment to exit on its own so zombie processes do not pile up
             for _ in 0..100 {
                 match child.try_wait() {
                     Ok(Some(_)) => return true,
@@ -176,7 +180,8 @@ fn send_linux(title: &str, body: &str, _sound: Option<&str>) -> bool {
     )
 }
 
-/// 同步发送一条系统通知。失败返回 false 并打印到 stderr。
+/// Send one system notification synchronously. Returns false on failure and
+/// prints to stderr.
 pub fn send(title: &str, body: &str, sound: Option<&str>) -> bool {
     let ok = if cfg!(target_os = "macos") {
         send_macos(title, body, sound)
@@ -191,7 +196,7 @@ pub fn send(title: &str, body: &str, sound: Option<&str>) -> bool {
     ok
 }
 
-/// 后台线程发送，避免阻塞主循环。
+/// Send from a background thread so the main loop is never blocked.
 pub fn send_async(title: &str, body: &str, sound: Option<&str>) {
     let title = title.to_string();
     let body = body.to_string();
@@ -207,13 +212,15 @@ mod tests {
 
     #[test]
     fn base64_matches_known_vectors() {
-        // PowerShell -EncodedCommand 用的就是 UTF-16LE + base64
+        // PowerShell -EncodedCommand uses exactly UTF-16LE + base64
         assert_eq!(base64_utf16_le("A"), "QQA=");
         assert_eq!(base64_utf16_le("AB"), "QQBCAA==");
         assert_eq!(base64_utf16_le("ABC"), "QQBCAEMA");
         assert_eq!(base64_utf16_le(""), "");
-        // 中文也要能编出来（UTF-16LE 每个字符两个字节）
-        assert_eq!(base64_utf16_le("中"), "LU4=");
+        // Latin-1 range characters must encode too (UTF-16LE uses two bytes per unit)
+        assert_eq!(base64_utf16_le("é"), "6QA=");
+        // a non-BMP character becomes a surrogate pair, i.e. four bytes
+        assert_eq!(base64_utf16_le("𝄞"), "NNge3Q==");
     }
 
     #[test]

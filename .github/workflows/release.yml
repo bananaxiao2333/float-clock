@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "要发布/覆盖的标签，例如 v0.2.0（留空则只构建，不发 Release）"
+        description: "Tag to publish or overwrite, e.g. v0.3.0 (leave empty to only build)"
         required: false
         type: string
 
@@ -19,7 +19,7 @@ env:
   BIN: float-clock
 
 jobs:
-  # ── macOS：arm64 + x86_64 各编一遍，再用 lipo 合成通用二进制 ────────────────
+  # -- macOS: build arm64 and x86_64 separately, then lipo them into one binary --
   macos:
     name: macOS (universal)
     runs-on: macos-latest
@@ -34,59 +34,65 @@ jobs:
         with:
           key: macos-universal
 
-      - name: 构建 arm64
+      - name: Build arm64
         run: cargo build --release --target aarch64-apple-darwin
 
-      - name: 构建 x86_64
+      - name: Build x86_64
         run: cargo build --release --target x86_64-apple-darwin
 
-      - name: 合成通用二进制
+      - name: Combine into a universal binary
         run: |
           mkdir -p out
           lipo -create \
             "target/aarch64-apple-darwin/release/$BIN" \
             "target/x86_64-apple-darwin/release/$BIN" \
-            -output "out/$BIN-macos-universal"
-          chmod +x "out/$BIN-macos-universal"
-          lipo -info "out/$BIN-macos-universal"
-          file "out/$BIN-macos-universal"
+            -output "out/$BIN"
+          lipo -info "out/$BIN"
+          file "out/$BIN"
 
-      # 裸二进制经浏览器下载会丢掉可执行位，Finder 于是把它当文本文件丢给
-      # 「文本编辑」，报一句「文字编码 Unicode (UTF-8) 不适用」。
-      # 所以要真正给人下的是这个 .app（zip 里带着可执行位和图标）。
-      - name: 打包成 .app
+      # A browser download strips the executable bit, and Finder then treats a
+      # bare Mach-O binary as text and hands it to TextEdit, which greets the
+      # user with "the text encoding Unicode (UTF-8) is not applicable". The
+      # .app inside a zip is what people should actually download: the zip
+      # preserves the mode and the icon.
+      - name: Bundle into a .app and zip it
         run: |
           VERSION="$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -1)"
-          tools/make_app.sh "out/$BIN-macos-universal" "$VERSION" out
-          (cd out && zip -qry "$BIN-macos-universal.zip" FloatClock.app)
-          ls -lR out
+          mkdir -p stage
+          mv "out/$BIN" "stage/$BIN"
+          tools/make_app.sh "stage/$BIN" "$VERSION" stage
+          rm -f "stage/$BIN"
+          cp QUICKSTART.txt config.example.toml stage/
+          (cd stage && zip -qry "../out/$BIN-macos-universal.zip" .)
+          unzip -l "out/$BIN-macos-universal.zip"
 
-      - name: 冒烟测试（不开窗口的那几条命令）
+      - name: Smoke test (the commands that do not open a window)
         run: |
-          BIN_PATH="out/$BIN-macos-universal"
-          "$BIN_PATH" --version
-          "$BIN_PATH" --init-config --config ./smoke.toml
-          "$BIN_PATH" --config ./smoke.toml \
+          APP="stage/FloatClock.app/Contents/MacOS/$BIN"
+          "$APP" --version
+          "$APP" --init-config --config ./smoke.toml
+          "$APP" --config ./smoke.toml \
             --target "2026-09-19T20:29:00" --offset "+120m" \
             --now "2026-09-19T20:00:00" --print
-          "$BIN_PATH" --config ./smoke.toml \
+          "$APP" --config ./smoke.toml \
             --target "2026-09-19T20:29:00" --offset "+120m" \
             --now "2026-09-19T20:00:00" --render-png ./smoke.png --scale 2
           file ./smoke.png
-          # .app 里那个二进制也得能跑
-          "./out/FloatClock.app/Contents/MacOS/float-clock" --version
-          codesign -dv out/FloatClock.app 2>&1 | head -3 || true
+          # The binary inside the .app has to keep its executable bit through
+          # the round trip, otherwise the archive is pointless.
+          rm -rf ./unpacked && mkdir ./unpacked
+          unzip -q "out/$BIN-macos-universal.zip" -d ./unpacked
+          test -x "./unpacked/FloatClock.app/Contents/MacOS/$BIN"
+          codesign -dv ./unpacked/FloatClock.app 2>&1 | head -3 || true
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos
-          path: |
-            out/float-clock-macos-universal
-            out/float-clock-macos-universal.zip
+          path: out/float-clock-macos-universal.zip
           if-no-files-found: error
 
-  # ── Linux：用 zig 当链接器，把 glibc 底线钉在 2.28 ─────────────────────────
-  # 这样 Ubuntu 20.04 / Debian 10 及以后都能直接跑，不用开容器。
+  # -- Linux: use zig as the linker and pin the glibc floor at 2.28 ------------
+  # That covers Ubuntu 20.04 / Debian 10 and newer without needing a container.
   linux:
     name: Linux x86_64
     runs-on: ubuntu-latest
@@ -101,28 +107,30 @@ jobs:
         with:
           key: linux-zig
 
-      # 不钉版本：本地验证过的组合就是「最新 zig + 最新 cargo-zigbuild」
+      # Not pinned: the combination verified locally is "latest zig + latest
+      # cargo-zigbuild".
       - uses: mlugg/setup-zig@v2
 
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-zigbuild
 
-      - name: 构建（glibc 2.28 底线）
+      - name: Build (glibc 2.28 floor)
         run: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.28
 
-      - name: 打包
+      - name: Package
         run: |
+          mkdir -p stage
+          install -m 0755 "target/x86_64-unknown-linux-gnu/release/$BIN" "stage/$BIN"
+          file "stage/$BIN"
+          cp QUICKSTART.txt config.example.toml stage/
           mkdir -p out
-          install -m 0755 "target/x86_64-unknown-linux-gnu/release/$BIN" "out/$BIN-linux-x86_64"
-          file "out/$BIN-linux-x86_64"
-          # tar.gz 能保住可执行位，浏览器下载解压后直接能跑
-          tar -czf "out/$BIN-linux-x86_64.tar.gz" -C out "$BIN-linux-x86_64"
-          ls -l out
+          (cd stage && zip -qry "../out/$BIN-linux-x86_64.zip" .)
+          unzip -l "out/$BIN-linux-x86_64.zip"
 
-      - name: 冒烟测试（不开窗口的那几条命令）
+      - name: Smoke test (the commands that do not open a window)
         run: |
-          BIN_PATH="out/$BIN-linux-x86_64"
+          BIN_PATH="stage/$BIN"
           "$BIN_PATH" --version
           "$BIN_PATH" --init-config --config ./smoke.toml
           "$BIN_PATH" --config ./smoke.toml \
@@ -132,18 +140,23 @@ jobs:
             --target "2026-09-19T20:29:00" --offset "+120m" \
             --now "2026-09-19T20:00:00" --render-png ./smoke.png --scale 2
           file ./smoke.png
+          "$BIN_PATH" --diagnose
+          # The zip has to hand back an executable binary.
+          rm -rf ./unpacked && mkdir ./unpacked
+          unzip -q "out/$BIN-linux-x86_64.zip" -d ./unpacked
+          test -x "./unpacked/$BIN"
+          "./unpacked/$BIN" --version
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux
-          path: |
-            out/float-clock-linux-x86_64
-            out/float-clock-linux-x86_64.tar.gz
+          path: out/float-clock-linux-x86_64.zip
           if-no-files-found: error
 
-  # ── Windows ───────────────────────────────────────────────────────────────
-  # 这里用 MSVC 工具链：windows runner 自带，零配置。
-  # （macOS / Linux 上本地交叉编译走的是 build.sh 里的 mingw-w64，产物等价。）
+  # -- Windows -----------------------------------------------------------------
+  # The MSVC toolchain ships with the windows runner, so this needs no setup.
+  # (Local cross-compiles from macOS / Linux go through mingw-w64 in build.sh;
+  # the resulting binaries are equivalent.)
   windows:
     name: Windows x86_64
     runs-on: windows-latest
@@ -158,50 +171,59 @@ jobs:
         with:
           key: windows-msvc
 
-      - name: 构建
+      - name: Build
         run: cargo build --release --target x86_64-pc-windows-msvc
 
-      # 图标和版本信息是 build.rs 里用 winresource 写进 exe 的（msvc 用系统的 rc.exe）
-      - name: 打包
-        shell: bash
-        run: |
-          mkdir -p out
-          cp "target/x86_64-pc-windows-msvc/release/$BIN.exe" "out/$BIN-windows-x86_64.exe"
-          ls -l out
-
-      - name: 冒烟测试（不开窗口的那几条命令）
+      # The icon and version block are written into the exe by build.rs through
+      # winresource (MSVC uses the system rc.exe).
+      - name: Package
         shell: pwsh
         run: |
-          $bin = "out/$env:BIN-windows-x86_64.exe"
+          New-Item -ItemType Directory -Force -Path stage, out | Out-Null
+          Copy-Item "target/x86_64-pc-windows-msvc/release/$env:BIN.exe" "stage/$env:BIN.exe"
+          Copy-Item QUICKSTART.txt, config.example.toml stage/
+          Compress-Archive -Path "stage/*" -DestinationPath "out/$env:BIN-windows-x86_64.zip" -Force
+          Get-ChildItem out | Format-Table Name, Length
+
+      - name: Smoke test (the commands that do not open a window)
+        shell: pwsh
+        run: |
+          $bin = "stage/$env:BIN.exe"
           & $bin --version
-          if ($LASTEXITCODE -ne 0) { throw "--version 失败" }
+          if ($LASTEXITCODE -ne 0) { throw "--version failed" }
           & $bin --init-config --config ./smoke.toml
           & $bin --config ./smoke.toml `
               --target "2026-09-19T20:29:00" --offset "+120m" `
               --now "2026-09-19T20:00:00" --print
-          if ($LASTEXITCODE -ne 0) { throw "--print 失败" }
+          if ($LASTEXITCODE -ne 0) { throw "--print failed" }
           & $bin --config ./smoke.toml `
               --target "2026-09-19T20:29:00" --offset "+120m" `
               --now "2026-09-19T20:00:00" --render-png ./smoke.png --scale 2
-          if ($LASTEXITCODE -ne 0) { throw "--render-png 失败" }
+          if ($LASTEXITCODE -ne 0) { throw "--render-png failed" }
           Get-Item ./smoke.png | Format-List Name, Length
 
-          # 资源段在不在（图标 + 版本信息）
-          $bytes = (Get-Item $bin).VersionInfo
-          "ProductName   : $($bytes.ProductName)"
-          "FileDescription: $($bytes.FileDescription)"
-          "FileVersion   : $($bytes.FileVersion)"
-          if ($bytes.ProductName -ne "FloatClock") { throw "exe 里没写进版本信息" }
+          # Is the resource section there (icon plus version block)?
+          $info = (Get-Item $bin).VersionInfo
+          "ProductName    : $($info.ProductName)"
+          "FileDescription: $($info.FileDescription)"
+          "FileVersion    : $($info.FileVersion)"
+          if ($info.ProductName -ne "FloatClock") { throw "no version info in the exe" }
+
+          # The zip has to contain the exe.
+          Expand-Archive -Path "out/$env:BIN-windows-x86_64.zip" -DestinationPath ./unpacked -Force
+          if (-not (Test-Path "./unpacked/$env:BIN.exe")) { throw "the exe is missing from the zip" }
+          & "./unpacked/$env:BIN.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw "the exe from the zip does not run" }
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: out/float-clock-windows-x86_64.exe
+          path: out/float-clock-windows-x86_64.zip
           if-no-files-found: error
 
-  # ── 汇总成一个 Release ────────────────────────────────────────────────────
+  # -- Collect everything into one Release -------------------------------------
   release:
-    name: 发布
+    name: Publish
     needs: [macos, linux, windows]
     runs-on: ubuntu-latest
     steps:
@@ -212,22 +234,22 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: 生成校验和
+      - name: Generate checksums
         working-directory: dist
         run: |
           ls -lh
           rm -f SHA256SUMS
-          find . -maxdepth 1 -type f ! -name SHA256SUMS -exec sha256sum {} + \
-            | sed 's|\./||' | sort -k 2 > SHA256SUMS
+          # Only the published archives: every platform ships one .zip.
+          sha256sum ./*.zip | sed 's|\./||' | sort -k 2 > SHA256SUMS
           cat SHA256SUMS
 
-      - name: 打标签（手动触发时）
+      - name: Tag (when triggered by hand)
         if: github.event_name == 'workflow_dispatch' && inputs.tag != ''
         run: |
           git tag -f "${{ inputs.tag }}"
           git push -f origin "${{ inputs.tag }}"
 
-      - name: 发布 Release
+      - name: Publish the release
         if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
         uses: softprops/action-gh-release@v2
         with:
@@ -236,14 +258,12 @@ jobs:
           generate_release_notes: true
           draft: false
           files: |
-            dist/float-clock-macos-universal
             dist/float-clock-macos-universal.zip
-            dist/float-clock-linux-x86_64
-            dist/float-clock-linux-x86_64.tar.gz
-            dist/float-clock-windows-x86_64.exe
+            dist/float-clock-linux-x86_64.zip
+            dist/float-clock-windows-x86_64.zip
             dist/SHA256SUMS
 
-      - name: 只构建不发版时，把产物留在 Actions 里
+      - name: Build-only run: keep the artefacts in Actions
         if: github.event_name == 'workflow_dispatch' && inputs.tag == ''
         uses: actions/upload-artifact@v4
         with:
