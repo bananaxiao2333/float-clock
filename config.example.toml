@@ -1,0 +1,96 @@
+# FloatClock 悬浮倒计时配置
+# 改完保存即可，程序约 1 秒内自动重载（无需重启）。
+# 命令行 --target / --offset 可临时覆盖本文件。
+
+[window]
+# 浮窗左上角坐标（拖动后会自动写回这里）
+x = 1057
+y = 106
+# 去掉标题栏，配合透明背景实现「只有文字」的悬浮效果
+borderless = true
+# 永远置顶
+topmost = true
+# 锁定后不能拖动（右键随时切换；锁定状态也会写回这里）
+locked = true
+# 整体不透明度 0.05~1.0（透明背景已够用，一般保持 1.0）
+opacity = 1.0
+
+[display]
+# 等宽字体；留空自动挑选系统等宽字体（Menlo / Consolas / DejaVu Sans Mono ...）
+font_family = ""
+# 主标题（距离偏移还有多久）字号
+main_size = 46
+# 副标题（距离目标时间点过去了多久）字号
+sub_size = 18
+# 绿色粗体
+color = "#00FF66"
+# 副标题颜色，留空表示跟主标题一致
+sub_color = ""
+bold = true
+# 超过一天时显示 DD:HH:MM:SS（所有位都补 0 对齐）
+show_days = true
+# 主副标题之间的间距（像素）
+gap = 2
+# 第三行：目标时间点 + 偏移（同样绿字、透明底）。设成空字符串 "" 则整行不显示。
+# 可用占位符：
+#   {date} {time} {datetime}    目标时间点 T
+#   {mark} {mark_datetime}      偏移时刻 M = T + offset
+#   {delta}                   偏移的补零写法，如 +02:00:00
+#   {delta_human}             偏移的中文写法，如 +2 小时
+info_template = "{time} · {delta}"
+# 第三行字号
+info_size = 14
+# 第三行颜色，留空 = 跟主标题一致（绿色）
+info_color = ""
+# 第三行样式：
+#   "auto"     = 有原生叠层（macOS）就镂空，其它平台自动用普通绿字
+#   "knockout" = 强制镂空（非 macOS 会退回普通绿字）
+#   "text"     = 强制普通绿字、透明底
+info_style = "auto"
+# Linux 等不支持透明背景的平台上用的底色
+x11_background = "#101010"
+# 刷新间隔（毫秒）
+interval_ms = 200
+# 锁定状态指示：border = 用外框线表示（实线=锁定，虚线=可拖动），none = 不显示
+lock_indicator = "border"
+# 外框线颜色，留空 = 跟文字同色
+border_color = ""
+# 外框线宽（像素）
+border_width = 2
+# true：锁定时实线、解锁时虚线；false 反过来
+solid_when_locked = true
+# 显示模板：{sign} 就是 + / -，{clock} 是补零时间
+main_template = "T{sign}{clock}"
+sub_template = "T{sign}{clock}"
+
+[time]
+# 目标时间点。支持：
+#   2026-01-01T09:30:00   2026-01-01 09:30   2026-01-01
+#   09:30:00（今天该时刻，已过则自动顺延到明天 —— 每天重复的日程用这种写法）
+#   +1h30m（相对现在）
+# 绝对时间点过去之后，显示会自然翻转成 T+…
+target = "2026-09-19T20:29:00"
+# 偏移。主标题倒计时指向的时刻 = 目标时间点 + 偏移。
+# 支持 -00:05:00 / 5:00 / 1h30m / -300 / 0 等写法
+offset = "+00:30:00"
+
+[notify]
+# 总开关
+enabled = true
+# 在每个时间点【之前】这些秒数各提醒一次
+before = [3600, 1800, 900, 600, 300, 180, 120, 60, 30, 10, 5, 3, 2, 1]
+# 在每个时间点【之后】这些秒数各提醒一次
+after = [1, 5, 30, 60, 300]
+# 正点提醒
+at_moment = true
+# 通知声音
+sound = true
+# macOS 提示音：Glass / Ping / Pop / Funk / Basso / Blow / Bottle / Frog / Hero / Morse / Purr / Sosumi / Submarine / Tink
+sound_name = "Glass"
+# 通知文案模板（纯文本，不带 emoji，用 [] 这类符号做装饰）。占位符：
+#   {label} 时间点名称   {sign} - 或 +   {clock} 补零时间   {human} 人话时长
+#   {time} 该时刻 HH:MM:SS   {datetime} 该时刻完整时间
+title_template = "[T{sign}{clock}] {label}"
+body_before = "距离{label}还有 {human}"
+body_at = "{label}已到 · {time}"
+body_after = "{label}已过去 {human}"

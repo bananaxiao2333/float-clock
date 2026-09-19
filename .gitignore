@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.spec
+/build
+/dist
+
+# 注意：.python-version 是要进仓库的 —— README 里说明了为什么必须钉在
+# 3.12.7（uv 的最后一个自带 Tk 8.6 的构建，Tk 9.0 在 macOS 上透明有回归）
+
+# 各人自己的时间点不该进仓库（模板在 config.example.toml）
+/config.toml
+
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/
+*.swp

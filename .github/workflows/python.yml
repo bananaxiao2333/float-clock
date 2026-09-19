@@ -1,0 +1,37 @@
+name: Python CI
+
+on:
+  push:
+    branches: [python]
+  pull_request:
+    branches: [python]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: 单元测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 安装依赖
+        run: uv sync --group dev
+
+      # 只跑纯逻辑的单元测试：Tk 冒烟测试（test_overlay_smoke.py）需要真实显示器，
+      # 在那台机器上单独跑 `uv run python -m unittest discover -s tests -v`。
+      - name: 单元测试
+        run: uv run python -m unittest discover -s tests -p "test_float_clock.py" -v
+
+      - name: 冒烟：命令行能起来
+        run: |
+          uv run float-clock --version
+          uv run float-clock --init-config --config ./smoke.toml
+          uv run float-clock --config ./smoke.toml \
+            --target "2026-09-19T20:29:00" --offset "+120m" --print
